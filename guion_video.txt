@@ -1,0 +1,12 @@
+TITULO_SUPERIOR: Botella Maldita Imposible
+MODO_ENCUADRE: full
+VOLUMEN_VIDEO_ORIGINAL: 0
+ARCHIVO_SALIDA: auto
+
+[GUION]
+TIEMPO | EFECTO | SFX | EMOJI | FLECHA | CIRCULO | TEXTO
+00:00 - 00:05 | zoom_impacto | boxing_bell+error | enojo:izquierda | ninguno | ninguno | ¡Esta chica tiene la peor suerte del mundo jugando a la botella! ¡En el primer giro le toca tomar!
+00:05 - 00:10 | zoom_in | whoosh+cartoon_laugh | risa:derecha | ninguno | ninguno | ¡Intenta esconderse detrás del sillón pero la botella vuelve a apuntarle directo a ella y regresa muy enojada!
+00:10 - 00:15 | alerta_roja | riser_suction | sorprendido:izquierda | centro | ninguno | ¡La gira con toda su fuerza para salvarse pero pasa algo imposible! ¡La botella se levanta sola apuntando arriba!
+00:15 - 00:19 | temblor | crowd_shocked+xp_Error | sorprendido:derecha | ninguno | ninguno | ¡Aunque se trepó al techo la botella maldita la sigue apuntando sin explicación!
+00:19 - 00:23 | brillo_epico | punch+fart | lloro:izquierda | ninguno | ninguno | ¡Sus amigos miran aterrados y abandonan el juego antes de que pase algo paranormal!

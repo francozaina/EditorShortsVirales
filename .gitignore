@@ -1,0 +1,20 @@
+# Archivos temporales y de compilación
+temp_build/
+output_shorts/
+__pycache__/
+*.pyc
+*.pyo
+
+# Archivos de video de entrada y pruebas locales
+video_input.*
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.webm
+
+# Configuración de editor y logs
+.env
+*.log
+.vscode/
+.idea/
