@@ -3250,6 +3250,20 @@ def iniciar_aplicacion_gui() -> None:
 
             items_a_mostrar, _, _ = _obtener_programados_filtrados()
 
+            mapa_avatares: Dict[str, str] = {}
+            try:
+                from subir_a_youtube import listar_cuentas_vinculadas
+                for c_acc in listar_cuentas_vinculadas():
+                    cid_acc = str(c_acc.get("id") or "principal")
+                    cnom_acc = str(c_acc.get("nombre") or "")
+                    av_acc = str(c_acc.get("avatar_path") or "")
+                    if av_acc:
+                        mapa_avatares[cid_acc] = av_acc
+                        if cnom_acc:
+                            mapa_avatares[cnom_acc] = av_acc
+            except Exception:
+                pass
+
             sec_prog_header = ctk.CTkFrame(scroll_f, fg_color="transparent")
             sec_prog_header.pack(fill="x", padx=10, pady=(4, 6))
 
@@ -3345,29 +3359,25 @@ def iniciar_aplicacion_gui() -> None:
                     row_line2 = ctk.CTkFrame(item_card, fg_color="transparent")
                     row_line2.pack(fill="x", padx=14, pady=(0, 10))
 
-                    nom_cuenta = str(it.get("cuenta_nombre") or "")
-                    if nom_cuenta:
-                        ctk.CTkLabel(
-                            row_line2,
-                            text=nom_cuenta[:20],
-                            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                            text_color="#ffffff",
-                            fg_color="#101524",
-                            corner_radius=8,
-                            padx=10,
-                            pady=2,
-                        ).pack(side="left", padx=(0, 8))
+                    nom_cuenta = str(it.get("cuenta_nombre") or it.get("cuenta_id") or "")
+                    cid_it = str(it.get("cuenta_id") or "")
+                    av_p = mapa_avatares.get(cid_it) or mapa_avatares.get(nom_cuenta) or ""
+                    img_av = _cargar_imagen_avatar_ctk(av_p, size_px=18) if av_p else None
 
-                    ctk.CTkLabel(
-                        row_line2,
-                        text="Programado",
-                        font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                        text_color="#ffffff",
-                        fg_color="#101524",
-                        corner_radius=8,
-                        padx=10,
-                        pady=2,
-                    ).pack(side="left")
+                    if nom_cuenta:
+                        lbl_kw = {
+                            "text": f" {nom_cuenta[:20]}" if img_av else nom_cuenta[:20],
+                            "font": ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                            "text_color": "#ffffff",
+                            "fg_color": "#101524",
+                            "corner_radius": 8,
+                            "padx": 8,
+                            "pady": 2,
+                        }
+                        if img_av:
+                            lbl_kw["image"] = img_av
+                            lbl_kw["compound"] = "left"
+                        ctk.CTkLabel(row_line2, **lbl_kw).pack(side="left", padx=(0, 8))
 
                     url_v = it.get("url") or ""
                     if url_v:
@@ -3538,6 +3548,20 @@ def iniciar_aplicacion_gui() -> None:
             pubs_f, _, _ = _obtener_publicados_filtrados()
             candidatos = list(pubs_f)
 
+            mapa_avatares: Dict[str, str] = {}
+            try:
+                from subir_a_youtube import listar_cuentas_vinculadas
+                for c_acc in listar_cuentas_vinculadas():
+                    cid_acc = str(c_acc.get("id") or "principal")
+                    cnom_acc = str(c_acc.get("nombre") or "")
+                    av_acc = str(c_acc.get("avatar_path") or "")
+                    if av_acc:
+                        mapa_avatares[cid_acc] = av_acc
+                        if cnom_acc:
+                            mapa_avatares[cnom_acc] = av_acc
+            except Exception:
+                pass
+
             criterio = orden_var.get()
             if "Vistas" in criterio:
                 candidatos.sort(key=lambda x: int(x.get("vistas") or 0), reverse=True)
@@ -3615,9 +3639,29 @@ def iniciar_aplicacion_gui() -> None:
                     )
                     lbl_tit_pub.pack(side="left", fill="x", expand=True)
 
-                    # Línea 2: Vistas, Likes, Comentarios a la izquierda, botón Ver en YouTube por debajo de fecha/hora
+                    # Línea 2: Canal, Vistas, Likes, Comentarios a la izquierda, botón Ver en YouTube por debajo de fecha/hora
                     row_line2 = ctk.CTkFrame(card_pub_v, fg_color="transparent")
                     row_line2.pack(fill="x", padx=14, pady=(0, 10))
+
+                    nom_cuenta_pub = str(it_pub.get("cuenta_nombre") or it_pub.get("cuenta_id") or "")
+                    cid_pub = str(it_pub.get("cuenta_id") or "")
+                    av_p_pub = mapa_avatares.get(cid_pub) or mapa_avatares.get(nom_cuenta_pub) or ""
+                    img_av_pub = _cargar_imagen_avatar_ctk(av_p_pub, size_px=18) if av_p_pub else None
+
+                    if nom_cuenta_pub:
+                        lbl_kw_pub = {
+                            "text": f" {nom_cuenta_pub[:20]}" if img_av_pub else nom_cuenta_pub[:20],
+                            "font": ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                            "text_color": "#ffffff",
+                            "fg_color": "#101524",
+                            "corner_radius": 8,
+                            "padx": 8,
+                            "pady": 2,
+                        }
+                        if img_av_pub:
+                            lbl_kw_pub["image"] = img_av_pub
+                            lbl_kw_pub["compound"] = "left"
+                        ctk.CTkLabel(row_line2, **lbl_kw_pub).pack(side="left", padx=(0, 8))
 
                     v_num = int(it_pub.get("vistas") or 0)
                     l_num = int(it_pub.get("likes") or 0)
