@@ -2074,21 +2074,9 @@ def iniciar_aplicacion_gui() -> None:
         ).pack(side="right")
 
         keys_existentes = obtener_gemini_api_keys()
-        txt_k = ctk.CTkTextbox(
-            card_api,
-            corner_radius=12,
-            height=66,
-            fg_color=INPUT_BG,
-            border_color="#2e364f",
-            border_width=1,
-            font=ctk.CTkFont(family="Consolas", size=12),
-        )
-        txt_k.pack(fill="x", padx=18, pady=(0, 8))
-        if keys_existentes:
-            txt_k.insert("1.0", "\n".join(keys_existentes))
 
         row_k_bottom = ctk.CTkFrame(card_api, fg_color="transparent")
-        row_k_bottom.pack(fill="x", padx=18, pady=(0, 12))
+        row_k_bottom.pack(fill="x", padx=18, pady=(4, 12))
 
         n_ini = len(keys_existentes)
         lbl_status_k = ctk.CTkLabel(
@@ -2099,33 +2087,163 @@ def iniciar_aplicacion_gui() -> None:
         )
         lbl_status_k.pack(side="left")
 
-        def _guardar_k() -> None:
-            k_raw = txt_k.get("1.0", "end").strip()
-            keys_lista = extraer_gemini_api_keys(k_raw)
-            guardar_gemini_api_key("\n".join(keys_lista))
-            n_k = len(keys_lista)
+        def _actualizar_status_pool(n_k: int) -> None:
             lbl_status_k.configure(
                 text=f"✔ Pool activo: {n_k} cuenta{'s' if n_k != 1 else ''} vinculada{'s' if n_k != 1 else ''}" if n_k else "⚠ Sin claves cargadas",
                 text_color=GREEN_ACCENT if n_k else "#f59e0b",
             )
-            if n_k > 1:
-                messagebox.showinfo(
-                    "Multi-Cuenta Activa",
-                    f"¡Se guardaron {n_k} API Keys en el pool!\nLa rotación automática entre cuentas está activa si se agota la cuota diaria.",
+
+        def _abrir_dialogo_editar_claves() -> None:
+            win_e = ctk.CTkToplevel(win)
+            win_e.title("Editar Lista de Claves API")
+            win_e.geometry("520x400")
+            win_e.resizable(False, False)
+            aplicar_icono_ventana(win_e)
+            win_e.transient(win)
+            win_e.grab_set()
+
+            try:
+                win_e.update_idletasks()
+                x = win.winfo_x() + (win.winfo_width() // 2) - 260
+                y = win.winfo_y() + (win.winfo_height() // 2) - 200
+                win_e.geometry(f"+{max(0, x)}+{max(0, y)}")
+            except Exception:
+                pass
+
+            f_c = ctk.CTkFrame(win_e, fg_color="#101524", corner_radius=16, border_width=1, border_color="#222b42")
+            f_c.pack(fill="both", expand=True, padx=14, pady=14)
+
+            ctk.CTkLabel(
+                f_c,
+                text="Lista de Claves API de Gemini / Argon 4",
+                font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
+                text_color=TEXT_MAIN,
+            ).pack(anchor="w", padx=16, pady=(12, 4))
+
+            ctk.CTkLabel(
+                f_c,
+                text="Ingresá una clave por línea. Podés agregar, editar o eliminar claves del pool.",
+                font=ctk.CTkFont(family="Segoe UI", size=11),
+                text_color="#94a3b8",
+                anchor="w",
+            ).pack(anchor="w", padx=16, pady=(0, 10))
+
+            txt_edit = ctk.CTkTextbox(
+                f_c,
+                corner_radius=12,
+                fg_color=INPUT_BG,
+                border_color="#2e364f",
+                border_width=1,
+                font=ctk.CTkFont(family="Consolas", size=12),
+            )
+            txt_edit.pack(fill="both", expand=True, padx=16, pady=(0, 14))
+
+            claves_actuales = obtener_gemini_api_keys()
+            if claves_actuales:
+                txt_edit.insert("1.0", "\n".join(claves_actuales))
+
+            row_btns = ctk.CTkFrame(f_c, fg_color="transparent")
+            row_btns.pack(fill="x", padx=16, pady=(0, 6))
+
+            def _guardar_desde_editor() -> None:
+                k_raw = txt_edit.get("1.0", "end").strip()
+                keys_lista = extraer_gemini_api_keys(k_raw)
+                guardar_gemini_api_key("\n".join(keys_lista))
+                _actualizar_status_pool(len(keys_lista))
+                win_e.destroy()
+                if keys_lista:
+                    messagebox.showinfo("Claves Guardadas", f"Se guardaron {len(keys_lista)} clave(s) en el pool.", parent=win)
+                else:
+                    messagebox.showwarning("Atención", "No se detectó ninguna clave válida. El pool quedó vacío.", parent=win)
+
+            ctk.CTkButton(
+                row_btns,
+                text="Cancelar",
+                command=win_e.destroy,
+                corner_radius=10,
+                height=30,
+                width=100,
+                fg_color="#1e293b",
+                hover_color="#334155",
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                text_color="#e2e8f0",
+            ).pack(side="left")
+
+            ctk.CTkButton(
+                row_btns,
+                text="Guardar Cambios",
+                command=_guardar_desde_editor,
+                corner_radius=10,
+                height=30,
+                width=130,
+                fg_color=GREEN_ACCENT,
+                hover_color="#059669",
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                text_color="#052e16",
+            ).pack(side="right")
+
+        ctk.CTkButton(
+            top_api,
+            text="Editar Lista",
+            command=_abrir_dialogo_editar_claves,
+            corner_radius=14,
+            height=28,
+            width=105,
+            fg_color="#1e293b",
+            hover_color="#334155",
+            text_color="#e2e8f0",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+        ).pack(side="right", padx=(0, 8))
+
+        def _pegar_desde_portapapeles() -> None:
+            try:
+                clip_raw = win.clipboard_get()
+            except Exception:
+                clip_raw = ""
+
+            if not clip_raw or not clip_raw.strip():
+                messagebox.showwarning(
+                    "Portapapeles Vacío",
+                    "No se encontró texto en el portapapeles.\nCopiá una API Key de Google AI Studio e intentá de nuevo.",
                     parent=win,
                 )
-            elif n_k == 1:
-                messagebox.showinfo("Guardado", "API Key guardada correctamente.", parent=win)
-            else:
-                messagebox.showwarning("Atención", "No se detectó ninguna API Key válida.", parent=win)
+                return
+
+            candidatas = extraer_gemini_api_keys(clip_raw)
+            if not candidatas:
+                messagebox.showwarning(
+                    "Clave No Válida",
+                    "El texto del portapapeles no coincide con una API Key válida de Gemini (debe tener al menos 20 caracteres).",
+                    parent=win,
+                )
+                return
+
+            actuales = obtener_gemini_api_keys()
+            nuevas = [k for k in candidatas if k not in actuales]
+
+            if not nuevas:
+                messagebox.showinfo(
+                    "Ya Registrada",
+                    "La clave copiada ya está registrada en el pool.",
+                    parent=win,
+                )
+                return
+
+            totales = actuales + nuevas
+            guardar_gemini_api_key("\n".join(totales))
+            _actualizar_status_pool(len(totales))
+
+            cant_nuevas = len(nuevas)
+            msg = f"Se agregó {cant_nuevas} clave nueva al pool." if cant_nuevas == 1 else f"Se agregaron {cant_nuevas} claves nuevas al pool."
+            messagebox.showinfo("Clave Agregada", f"{msg}\nTotal en el pool: {len(totales)} cuenta{'s' if len(totales) != 1 else ''}.", parent=win)
 
         ctk.CTkButton(
             row_k_bottom,
-            text="Guardar Claves",
-            command=_guardar_k,
+            text="Pegar desde Portapapeles",
+            command=_pegar_desde_portapapeles,
             corner_radius=14,
-            height=32,
-            width=120,
+            height=30,
+            width=180,
             fg_color=GREEN_ACCENT,
             hover_color="#059669",
             text_color="#052e16",
