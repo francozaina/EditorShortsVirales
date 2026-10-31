@@ -695,11 +695,11 @@ class GeminiPoolOrchestrator:
 
         mosaico_part: Optional[types.Part] = None
 
-        # Orden de modelos a probar: siempre chequear Argon 4 primero
-        if modelo_preferido and modelo_preferido.strip() and modelo_preferido.strip() != "gemini-4-argon":
+        # Orden de modelos a probar: el modelo preferido del usuario se intenta PRIMERO (Regla 5 de AGENTS.md)
+        if modelo_preferido and modelo_preferido.strip():
             mod_p = modelo_preferido.strip()
-            resto = [m for m in self.models if m != "gemini-4-argon" and m != mod_p]
-            modelos_ordenados = ["gemini-4-argon", mod_p] + resto
+            resto = [m for m in self.models if m != mod_p]
+            modelos_ordenados = [mod_p] + resto
         else:
             modelos_ordenados = list(self.models)
 
@@ -709,9 +709,14 @@ class GeminiPoolOrchestrator:
         total_cuentas = len(self.api_keys)
         ultimo_err = None
 
-        # Separar modelos principales (alta inteligencia visual) de modelos lite (fallback de emergencia)
-        modelos_principales = [m for m in modelos_ordenados if "lite" not in m]
-        modelos_lite = [m for m in modelos_ordenados if "lite" in m]
+        # Si el modelo preferido es Lite (ej. gemini-3.5-flash-lite), entra directo en Fase 1
+        if modelo_preferido and "lite" in modelo_preferido.lower():
+            mod_p = modelo_preferido.strip()
+            modelos_principales = [mod_p] + [m for m in modelos_ordenados if "lite" not in m and m != mod_p]
+            modelos_lite = [m for m in modelos_ordenados if "lite" in m and m != mod_p]
+        else:
+            modelos_principales = [m for m in modelos_ordenados if "lite" not in m]
+            modelos_lite = [m for m in modelos_ordenados if "lite" in m]
 
         def _intentar_paso(lista_mods: List[str], modo_nombre: str, contenidos: List[Any], timeout_seg_actual: float) -> Optional[str]:
             nonlocal ultimo_err
@@ -724,6 +729,25 @@ class GeminiPoolOrchestrator:
                 cuentas_vivas = self.fast_probe_accounts(model)
                 if not cuentas_vivas:
                     continue
+
+                # Si el modelo a usar es gemini-3.5-flash-lite en la pasada con video, ejecutar el pipeline de 3 instancias en simultáneo
+                if model == "gemini-3.5-flash-lite" and video_part is not None and "video" in modo_nombre:
+                    try:
+                        res_3inst = self._generar_guion_3_instancias_lite(
+                            video_part=video_part,
+                            prompt_maestro=prompt_maestro,
+                            cuentas_vivas=cuentas_vivas,
+                            timeout_seg=timeout_seg_actual,
+                            dur_seg=dur_seg,
+                            _notif=_notif,
+                            cancelar_check=cancelar_check,
+                        )
+                        if res_3inst:
+                            return res_3inst
+                    except InterruptedError:
+                        raise
+                    except Exception as e_3:
+                        logger.warning(f"Error en pipeline 3 instancias de 3.5 Lite: {e_3}. Probando flujo normal...")
 
                 for key_idx in cuentas_vivas:
                     if cancelar_check and cancelar_check():
@@ -831,6 +855,165 @@ class GeminiPoolOrchestrator:
             pass
         return guion_actual
 
+    def _generar_guion_3_instancias_lite(
+        self,
+        video_part: types.Part,
+        prompt_maestro: str,
+        cuentas_vivas: List[int],
+        timeout_seg: float,
+        dur_seg: float,
+        _notif: Callable[[float, str], None],
+        cancelar_check: Optional[Callable[[], bool]] = None,
+    ) -> Optional[str]:
+        """
+        Pipeline multi-agente de 3 instancias para Gemini 3.5 Flash Lite:
+        - Instancia 1: Genera borrador viral con gancho de alto impacto y tensión inmediata.
+        - Instancia 2: Genera borrador alternativo con gancho de intriga psicológica y curiosidad.
+          (Ambas instancias se ejecutan en simultáneo en paralelo).
+        - Instancia 3 (Revisor y Sintetizador): Recibe el video original + Borrador 1 + Borrador 2,
+          evalúa la retención, combina lo mejor de ambos con lo que realmente ocurre en pantalla,
+          y entrega el guion definitivo estructurado en formato [GUION].
+        """
+        if cancelar_check and cancelar_check():
+            raise InterruptedError("Generación de guion cancelada por el usuario.")
+
+        _notif(0.20, "Gemini 3.5 Lite: Generando 2 borradores virales en simultáneo (Instancias 1 y 2)...")
+
+        idx_c1 = cuentas_vivas[0]
+        idx_c2 = cuentas_vivas[1 % len(cuentas_vivas)]
+        idx_c3 = cuentas_vivas[2 % len(cuentas_vivas)] if len(cuentas_vivas) >= 3 else cuentas_vivas[0]
+
+        client_1 = self.clients[idx_c1]
+        client_2 = self.clients[idx_c2]
+        client_3 = self.clients[idx_c3]
+
+        prompt_d1 = (
+            prompt_maestro
+            + "\n\n[DIRECTIVA DE ESTILO BORRADOR 1]: "
+            + "Enfócate en máxima tensión desde el segundo 0, gancho potente directo al grano, "
+            + "comentarios con ironía filosa y ritmo acelerado."
+        )
+        prompt_d2 = (
+            prompt_maestro
+            + "\n\n[DIRECTIVA DE ESTILO BORRADOR 2]: "
+            + "Enfócate en intriga psicológica, curiosidad extrema ('nadie esperaba lo que pasó'), "
+            + "remate inesperado y humor sarcástico."
+        )
+
+        resp_d1: Dict[str, Any] = {"text": None, "err": None}
+        resp_d2: Dict[str, Any] = {"text": None, "err": None}
+        http_timeout = int(timeout_seg * 1000)
+
+        def _worker_d1():
+            try:
+                r1 = client_1.models.generate_content(
+                    model="gemini-3.5-flash-lite",
+                    contents=[video_part, prompt_d1],
+                    config=types.GenerateContentConfig(
+                        temperature=0.45,
+                        http_options=types.HttpOptions(timeout=http_timeout),
+                    ),
+                )
+                if r1 and r1.text and len(r1.text.strip()) > 80:
+                    resp_d1["text"] = r1.text
+            except Exception as ex:
+                resp_d1["err"] = ex
+
+        def _worker_d2():
+            try:
+                r2 = client_2.models.generate_content(
+                    model="gemini-3.5-flash-lite",
+                    contents=[video_part, prompt_d2],
+                    config=types.GenerateContentConfig(
+                        temperature=0.55,
+                        http_options=types.HttpOptions(timeout=http_timeout),
+                    ),
+                )
+                if r2 and r2.text and len(r2.text.strip()) > 80:
+                    resp_d2["text"] = r2.text
+            except Exception as ex:
+                resp_d2["err"] = ex
+
+        t1 = threading.Thread(target=_worker_d1, daemon=True)
+        t2 = threading.Thread(target=_worker_d2, daemon=True)
+        t1.start()
+        t2.start()
+
+        while t1.is_alive() or t2.is_alive():
+            if cancelar_check and cancelar_check():
+                raise InterruptedError("Generación de guion cancelada por el usuario.")
+            time.sleep(0.12)
+
+        txt_d1 = resp_d1.get("text")
+        txt_d2 = resp_d2.get("text")
+
+        if not txt_d1 and not txt_d2:
+            return None
+
+        if txt_d1 and txt_d2:
+            bloque_borradores = (
+                "=== BORRADOR 1 (Tensión e Impacto) ===\n"
+                + txt_d1.strip()
+                + "\n\n=== BORRADOR 2 (Intriga y Curiosidad) ===\n"
+                + txt_d2.strip()
+            )
+        else:
+            txt_unico = txt_d1 or txt_d2
+            bloque_borradores = "=== BORRADOR BASE ===\n" + txt_unico.strip()
+
+        _notif(0.55, "Gemini 3.5 Lite: Instancia 3 revisando borradores con el video y sintetizando guion final...")
+
+        instruccion_sintesis = (
+            "Eres el Editor Jefe de YouTube Shorts y Revisor de Retención Viral de Google.\n"
+            "Has recibido el video original y borradores independientes de guion creados por dos IAs:\n\n"
+            + bloque_borradores
+            + "\n\nMISIÓN DE REVISIÓN Y SÍNTESIS FINAL:\n"
+            + "1. Inspecciona el video adjunto y revisa los borradores generados.\n"
+            + "2. Extrae el gancho inicial (primeros 3 segundos) más potente e irresistible de cualquiera de los dos.\n"
+            + "3. Combina la mejor narración, las observaciones visuales más precisas y los momentos de mayor impacto de ambos borradores (cero spoilers, narración en tiempo real).\n"
+            + "4. Elige los mejores SFX, emojis, flechas/círculos y zooms que maximicen la retención y la sincronización con lo que pasa en pantalla.\n"
+            + "5. Asegura una cadencia perfecta (ritmo dinámico de 2.8 a 3.8 palabras por segundo por bloque).\n\n"
+            + prompt_maestro
+        )
+
+        resp_s3: Dict[str, Any] = {"text": None, "err": None}
+
+        def _worker_s3():
+            try:
+                r3 = client_3.models.generate_content(
+                    model="gemini-3.5-flash-lite",
+                    contents=[video_part, instruccion_sintesis],
+                    config=types.GenerateContentConfig(
+                        temperature=0.30,
+                        http_options=types.HttpOptions(timeout=http_timeout),
+                    ),
+                )
+                if r3 and r3.text and len(r3.text.strip()) > 80:
+                    resp_s3["text"] = r3.text
+            except Exception as ex:
+                resp_s3["err"] = ex
+
+        t3 = threading.Thread(target=_worker_s3, daemon=True)
+        t3.start()
+
+        while t3.is_alive():
+            if cancelar_check and cancelar_check():
+                raise InterruptedError("Generación de guion cancelada por el usuario.")
+            time.sleep(0.12)
+
+        txt_final = resp_s3.get("text")
+        if not txt_final:
+            txt_final = txt_d1 or txt_d2
+
+        if txt_final and len(txt_final.strip()) > 80:
+            _notif(0.85, "Gemini 3.5 Lite: Validando cadencia y catálogo de efectos...")
+            guion_limpio, advertencias = sanitizar_y_auditar_guion(txt_final, dur_seg)
+            if len(advertencias) >= 2:
+                guion_limpio = self._reparar_conteo_palabras(client_3, "gemini-3.5-flash-lite", guion_limpio, advertencias)
+            _notif(1.0, "✓ Guion completado con éxito (3 instancias de Gemini 3.5 Lite).")
+            return guion_limpio
+
+        return None
 
 # Instancia única en memoria para conservar la caché de salud durante la sesión
 _ORCHESTRATOR_INSTANCE: Optional[GeminiPoolOrchestrator] = None

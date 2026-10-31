@@ -4156,13 +4156,21 @@ def iniciar_aplicacion_gui() -> None:
     )
     btn_frenar_proceso.pack(side="right")
 
+    _max_pct_proceso = [0.0]
+
     def _actualizar_progreso_ui(
         pct_total: float,
         texto_estado: Optional[str] = None,
         color_estado: str = "#ffffff",
         color_barra: str = PURPLE_MAIN,
+        forzar_reinicio: bool = False,
     ) -> None:
-        pct_clamp = max(0.0, min(100.0, float(pct_total)))
+        pct_num = float(pct_total)
+        if forzar_reinicio or pct_num <= 0.01:
+            _max_pct_proceso[0] = max(0.0, min(100.0, pct_num))
+        else:
+            _max_pct_proceso[0] = max(_max_pct_proceso[0], max(0.0, min(100.0, pct_num)))
+        pct_clamp = _max_pct_proceso[0]
         barra_progreso_proceso.set(pct_clamp / 100.0)
         barra_progreso_proceso.configure(progress_color=color_barra)
         lbl_porcentaje_proceso.configure(text=f"{int(round(pct_clamp))}%")

@@ -867,12 +867,12 @@ class BloqueGuionCard(ctk.CTkFrame):
         self.assets_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.assets_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=4)
 
-        # Fila 1: Efecto, SFX 1, SFX 2
+        # Fila 1: Efecto, SFX 1, SFX 2, Flechas/Círculos y Altura Texto en una sola línea
         row_assets_1 = ctk.CTkFrame(self.assets_frame, fg_color="transparent")
         row_assets_1.pack(fill="x", pady=(0, 4))
 
         self.opt_efecto = self._crear_selector(
-            row_assets_1, "🎥 Efecto", LISTA_EFECTOS, self.datos.get("efecto", "ninguno"), width=125
+            row_assets_1, "🎥 Efecto", LISTA_EFECTOS, self.datos.get("efecto", "ninguno"), width=105
         )
 
         sfx_partes = [s.strip() for s in str(self.datos.get("sfx", "")).split("+") if s.strip()]
@@ -880,37 +880,43 @@ class BloqueGuionCard(ctk.CTkFrame):
         sfx2_val = sfx_partes[1] if len(sfx_partes) >= 2 else "ninguno"
 
         self.opt_sfx1 = self._crear_selector(
-            row_assets_1, "🔊 SFX 1", LISTA_SFX, sfx1_val, width=125
+            row_assets_1, "🔊 SFX 1", LISTA_SFX, sfx1_val, width=105
         )
         self.opt_sfx2 = self._crear_selector(
-            row_assets_1, "🔊 SFX 2", LISTA_SFX, sfx2_val, width=125
+            row_assets_1, "🔊 SFX 2", LISTA_SFX, sfx2_val, width=105
         )
 
-        # Fila 2: Botón Flechas/Círculos y Botón Altura Texto
-        row_assets_2 = ctk.CTkFrame(self.assets_frame, fg_color="transparent")
-        row_assets_2.pack(fill="x", pady=(2, 2))
-
+        # Botón Flechas/Círculos a la derecha en la misma línea
+        f_btn_pos = ctk.CTkFrame(row_assets_1, fg_color="transparent")
+        f_btn_pos.pack(side="left", padx=3, pady=2)
+        ctk.CTkLabel(f_btn_pos, text="", font=ctk.CTkFont(size=10)).pack(anchor="w")
         btn_pos = ctk.CTkButton(
-            row_assets_2,
+            f_btn_pos,
             text="Flechas/Círculos",
             command=self._abrir_selector_posicion,
-            height=28,
+            height=24,
+            width=108,
             fg_color="#1d4ed8",
             hover_color="#1e40af",
             font=ctk.CTkFont(size=11, weight="bold"),
         )
-        btn_pos.pack(side="left", padx=(4, 8))
+        btn_pos.pack()
 
+        # Botón Altura Texto a la derecha en la misma línea
+        f_btn_alt = ctk.CTkFrame(row_assets_1, fg_color="transparent")
+        f_btn_alt.pack(side="left", padx=3, pady=2)
+        ctk.CTkLabel(f_btn_alt, text="", font=ctk.CTkFont(size=10)).pack(anchor="w")
         self.btn_alt_toggle = ctk.CTkButton(
-            row_assets_2,
+            f_btn_alt,
             text="📏 Altura Texto",
             command=self._toggle_frame_altura,
-            height=28,
+            height=24,
+            width=95,
             fg_color="#1e2436",
             hover_color="#2d354d",
             font=ctk.CTkFont(size=11, weight="bold"),
         )
-        self.btn_alt_toggle.pack(side="left", padx=4)
+        self.btn_alt_toggle.pack()
 
         # Fila de Altura de Texto (oculta por defecto, se despliega con '📏 Altura Texto')
         self.frame_altura = ctk.CTkFrame(self.assets_frame, fg_color="#121623", corner_radius=6)

@@ -1246,10 +1246,17 @@ async def editar_video_con_guion(
     cancelar_check: Optional[Callable[[], bool]] = None,
     encoder_override: Optional[str] = None,
 ) -> Path:
+    _max_prog_render = [0.0]
+
     def _notificar_prog(frac_0_1: float, detalle: str) -> None:
         if callable(progreso_cb):
             try:
-                progreso_cb(float(np.clip(frac_0_1, 0.0, 1.0)), detalle)
+                val = float(np.clip(frac_0_1, 0.0, 1.0))
+                if val < _max_prog_render[0]:
+                    val = _max_prog_render[0]
+                else:
+                    _max_prog_render[0] = val
+                progreso_cb(val, detalle)
             except Exception:
                 pass
 
@@ -1651,7 +1658,7 @@ async def editar_video_con_guion(
                             pass
                     raise InterruptedError("Edición cancelada por el usuario.")
                 _notificar_prog(
-                    0.40 + 0.58 * (idx_seg / float(max(1, len(datos_segmentos)))),
+                    0.40 + 0.54 * (idx_seg / float(max(1, len(datos_segmentos)))),
                     f"Render 60 FPS: Segmento {idx_seg + 1}/{len(datos_segmentos)} (Subtítulos Neón + Tracking)...",
                 )
                 t_vid_ini = float(seg.t_inicio_video or 0.0)
@@ -1855,7 +1862,7 @@ async def editar_video_con_guion(
 
             # 6. Renderizar Outro automático de 0.7 segundos (Freeze-Frame + Desenfoque + Flecha al Like + Subtítulo Luminoso)
             if ultimo_frame_lienzo is not None and total_frames_outro > 0:
-                _notificar_prog(0.97, "Renderizando outro dinámico (campana de like y flecha animada a 60 FPS)...")
+                _notificar_prog(0.95, "Renderizando outro dinámico (campana de like y flecha animada a 60 FPS)...")
                 print("[*] Renderizando Outro final (Freeze-frame + desenfoque + flecha al Like)...")
                 if isinstance(ultimo_frame_lienzo, np.ndarray):
                     bg_blur = cv2.GaussianBlur(ultimo_frame_lienzo, (31, 31), 16)
@@ -1871,7 +1878,8 @@ async def editar_video_con_guion(
                     lienzo_out = lienzo_base_outro.copy()
 
                     if f_idx % max(1, FPS // 2) == 0:
-                        _notificar_prog(0.95, "Renderizando outro final con flecha a 60 FPS...")
+                        frac_o = f_idx / float(max(1, total_frames_outro))
+                        _notificar_prog(0.95 + 0.04 * frac_o, "Renderizando outro final con flecha a 60 FPS...")
 
                     # Flecha Roja al botón de Like de YouTube Shorts (X: 985, Y: 1040)
                     gestor_assets.dibujar_flecha_outro_like(
