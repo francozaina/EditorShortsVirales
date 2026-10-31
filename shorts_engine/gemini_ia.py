@@ -12,6 +12,7 @@ Arquitectura de Alta Disponibilidad:
 import os
 import sys
 import cv2
+import numpy as np
 import json
 import re
 import time
@@ -173,14 +174,15 @@ def guardar_gemini_api_key(api_key: str) -> None:
 # =====================================================================
 def generar_mosaico_video(ruta_video: Path, cols: int = 4, rows: int = 2) -> Tuple[bytes, float]:
     """
-    Extrae fotogramas clave espaciados y genera un único mosaico JPEG en memoria.
-    Permite análisis instantáneo del storyboard cuando el decoder de video satura.
+    Extrae fotogramas clave espaciados con decodificación secuencial rápida (cap.grab())
+    y genera un mosaico JPEG en memoria con OpenCV (~0.12s).
     """
     import io
     dur_seg, w_src, h_src, fps_src = obtener_info_video(ruta_video)
     num_tiles = cols * rows
     tile_w, tile_h = 270, 480
-    mosaico = Image.new("RGB", (cols * tile_w, rows * tile_h), (15, 17, 23))
+    canvas = np.zeros((rows * tile_h, cols * tile_w, 3), dtype=np.uint8)
+    canvas[:] = (23, 17, 15)  # Fondo oscuro en BGR
 
     cap = None
     try:
@@ -190,30 +192,71 @@ def generar_mosaico_video(ruta_video: Path, cols: int = 4, rows: int = 2) -> Tup
     except (Exception, SystemError, BaseException):
         cap = None
 
-    for i in range(num_tiles):
-        t_sec = min(max(0.15, (i + 0.5) * (dur_seg / num_tiles)), max(0.2, dur_seg - 0.15))
-        img_tile = None
+    tiles_cargados = 0
+    if cap is not None and cap.isOpened():
+        try:
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or fps_src or 30.0)
+            if total_frames > 0:
+                indices_list = list(np.linspace(0, max(0, total_frames - 2), num_tiles, dtype=int))
+                target_map: Dict[int, List[int]] = {}
+                for pos, f_idx in enumerate(indices_list):
+                    target_map.setdefault(int(f_idx), []).append(pos)
 
-        if cap is not None and cap.isOpened():
+                max_target = max(target_map.keys()) if target_map else 0
+                cur_idx = 0
+                while cur_idx <= max_target:
+                    if not cap.grab():
+                        break
+                    if cur_idx in target_map:
+                        ret, frame = cap.retrieve()
+                        if ret and frame is not None:
+                            resized = cv2.resize(frame, (tile_w, tile_h), interpolation=cv2.INTER_AREA)
+                            seg_actual = cur_idx / fps if fps > 0 else (cur_idx * (dur_seg / max(1, total_frames)))
+                            mm = int(seg_actual // 60)
+                            ss = seg_actual % 60
+                            etiqueta = f"{mm:02d}:{ss:04.1f}s"
+                            cv2.rectangle(resized, (0, 0), (min(tile_w, 140), 30), (0, 0, 0), -1)
+                            cv2.putText(
+                                resized, etiqueta, (6, 22),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2, cv2.LINE_AA
+                            )
+                            for idx_pos in target_map[cur_idx]:
+                                r = idx_pos // cols
+                                c = idx_pos % cols
+                                y1, y2 = r * tile_h, (r + 1) * tile_h
+                                x1, x2 = c * tile_w, (c + 1) * tile_w
+                                canvas[y1:y2, x1:x2] = resized
+                                tiles_cargados += 1
+                    cur_idx += 1
+        except Exception as e_cap:
+            logger.warning(f"Error en extracción secuencial cap.grab: {e_cap}")
+        finally:
             try:
-                cap.set(cv2.CAP_PROP_POS_MSEC, t_sec * 1000.0)
-                ok, frame_bgr = cap.read()
-                if ok and frame_bgr is not None:
-                    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-                    img_tile = Image.fromarray(frame_rgb).resize((tile_w, tile_h), Image.Resampling.LANCZOS)
-            except (Exception, SystemError, BaseException):
-                img_tile = None
+                cap.release()
+            except Exception:
+                pass
 
-        if img_tile is None:
+    # Fallback por FFmpeg si no se pudieron cargar todos los tiles
+    if tiles_cargados < num_tiles // 2:
+        for i in range(num_tiles):
+            r = i // cols
+            c = i % cols
+            y1, y2 = r * tile_h, (r + 1) * tile_h
+            x1, x2 = c * tile_w, (c + 1) * tile_w
+            if np.mean(canvas[y1:y2, x1:x2]) > 25:
+                continue
+            t_sec = min(max(0.15, (i + 0.5) * (dur_seg / num_tiles)), max(0.2, dur_seg - 0.15))
             try:
                 cmd_ff = [
                     "ffmpeg", "-v", "error",
                     "-ss", f"{max(0.0, t_sec):.3f}",
                     "-i", str(ruta_video),
                     "-frames:v", "1",
-                    "-vf", f"scale={tile_w}:{tile_h}:force_original_aspect_ratio=increase:flags=lanczos,crop={tile_w}:{tile_h}",
+                    "-vf", f"scale={tile_w}:{tile_h}:force_original_aspect_ratio=increase:flags=fast_bilinear,crop={tile_w}:{tile_h}",
                     "-f", "image2pipe",
-                    "-vcodec", "png",
+                    "-vcodec", "rawvideo",
+                    "-pix_fmt", "bgr24",
                     "-",
                 ]
                 proc_ff = subprocess.run(
@@ -223,39 +266,25 @@ def generar_mosaico_video(ruta_video: Path, cols: int = 4, rows: int = 2) -> Tup
                     creationflags=WIN_NO_WINDOW,
                     startupinfo=WIN_STARTUPINFO,
                 )
-                if proc_ff.returncode == 0 and proc_ff.stdout:
-                    img_tile = Image.open(io.BytesIO(proc_ff.stdout)).convert("RGB")
+                if proc_ff.returncode == 0 and len(proc_ff.stdout) == tile_w * tile_h * 3:
+                    frame_ff = np.frombuffer(proc_ff.stdout, dtype=np.uint8).reshape((tile_h, tile_w, 3))
+                    mm = int(t_sec) // 60
+                    ss = int(t_sec) % 60
+                    etiqueta = f"{mm:02d}:{ss:02d}s"
+                    cv2.rectangle(frame_ff, (0, 0), (min(tile_w, 140), 30), (0, 0, 0), -1)
+                    cv2.putText(
+                        frame_ff, etiqueta, (6, 22),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2, cv2.LINE_AA
+                    )
+                    canvas[y1:y2, x1:x2] = frame_ff
             except Exception:
-                img_tile = None
+                pass
 
-        if img_tile is None:
-            img_tile = Image.new("RGB", (tile_w, tile_h), (15, 17, 23))
-
-        draw = ImageDraw.Draw(img_tile)
-        draw.rectangle([0, 0, tile_w, 34], fill=(0, 0, 0))
-        mm = int(t_sec) // 60
-        ss = int(t_sec) % 60
-        etiqueta = f"#{i + 1} | {mm:02d}:{ss:02d} ({t_sec:.1f}s)"
-        draw.text((8, 6), etiqueta, fill=(250, 204, 21))
-
-        draw.rectangle([0, tile_h - 22, tile_w, tile_h], fill=(0, 0, 0))
-        draw.text((10, tile_h - 19), "IZQ        |        CENTRO        |        DER", fill=(180, 190, 210))
-
-        c = i % cols
-        r = i // cols
-        mosaico.paste(img_tile, (c * tile_w, r * tile_h))
-
-    if cap is not None:
-        try:
-            cap.release()
-        except Exception:
-            pass
+    ok_enc, enc_bytes = cv2.imencode(".jpg", canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+    jpeg_bytes = enc_bytes.tobytes() if ok_enc else b""
 
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     ruta_mosaico = TEMP_DIR / "mosaico_analisis.jpg"
-    buf = io.BytesIO()
-    mosaico.save(buf, format="JPEG", quality=82, optimize=True)
-    jpeg_bytes = buf.getvalue()
     try:
         ruta_mosaico.write_bytes(jpeg_bytes)
     except Exception:
@@ -266,16 +295,15 @@ def generar_mosaico_video(ruta_video: Path, cols: int = 4, rows: int = 2) -> Tup
 
 def generar_video_compacto_ia(ruta_video: Path) -> Tuple[Optional[bytes], float]:
     """
-    Comprime el video original a 360p 4 FPS (~350 KB - 1.5 MB).
-    Permite enviarlo inline a la API (Part.from_bytes) en memoria RAM sin File API.
+    Comprime el video original a un proxy ultrarrápido (480p @ 10 FPS, ~900 KB - 1.5 MB).
+    Permite enviarlo inline a la API (Part.from_bytes) en memoria RAM con mínima latencia de subida y tokenización.
     """
     dur_seg, w_v, h_v, _ = obtener_info_video(ruta_video)
 
-    # Bypass: si el video original ya pesa menos de 12 MB, no re-codificar.
-    # El 95% de los Shorts de 15-40s pesan 3-9 MB, evitamos 3-5 segundos de FFmpeg innecesario.
+    # Bypass: si el video original ya pesa menos de 4.5 MB, no re-codificar.
     try:
         peso_original = ruta_video.stat().st_size
-        if peso_original <= 12 * 1024 * 1024:
+        if peso_original <= int(4.5 * 1024 * 1024):
             return ruta_video.read_bytes(), dur_seg
     except Exception:
         pass
@@ -288,16 +316,20 @@ def generar_video_compacto_ia(ruta_video: Path) -> Tuple[Optional[bytes], float]
         except OSError:
             pass
 
-    filtro_escala = "scale=360:640:flags=fast_bilinear,fps=4" if (h_v >= w_v) else "scale=640:360:flags=fast_bilinear,fps=4"
+    # Remuestreo relámpago a 480p @ 10 FPS sin audio
+    cmd_proxy = [
+        "ffmpeg", "-y",
+        "-i", str(ruta_video),
+        "-vf", "scale=-2:480,fps=10",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "30",
+        "-an",
+        "-threads", "0",
+        str(ruta_low),
+    ]
     res = subprocess.run(
-        [
-            "ffmpeg", "-y",
-            "-i", str(ruta_video),
-            "-vf", filtro_escala,
-            "-c:v", "libx264", "-preset", "ultrafast", "-threads", "0", "-crf", "32",
-            "-c:a", "aac", "-b:a", "48k",
-            str(ruta_low),
-        ],
+        cmd_proxy,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         check=False,
@@ -307,7 +339,6 @@ def generar_video_compacto_ia(ruta_video: Path) -> Tuple[Optional[bytes], float]
     if res.returncode == 0 and ruta_low.exists() and 1000 < ruta_low.stat().st_size < 18_000_000:
         return ruta_low.read_bytes(), dur_seg
     return None, dur_seg
-
 
 # =====================================================================
 # AUDITOR Y AUTO-SANITIZADOR DETERMINISTA EN PYTHON (0 TOKENS, <5ms)

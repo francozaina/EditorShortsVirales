@@ -42,6 +42,42 @@ from motor_optimizado import realzar_frame_viral
 # ==============================================================================
 # 7. MOTOR DE ASSETS VISUALES (FLECHA, CÍRCULO ROJO, EMOJIS) Y EFECTOS DE CÁMARA
 # ==============================================================================
+# Caché global en memoria de sprites y assets escalados/rotados
+_CACHE_PNG_ESCALADOS: Dict[Tuple[str, int, int, int], np.ndarray] = {}
+
+def _obtener_asset_escalado_cache(
+    clave_asset: str,
+    base_np: np.ndarray,
+    w: int,
+    h: int,
+    angulo: float = 0.0,
+) -> np.ndarray:
+    """Devuelve el sprite escalado y rotado desde memoria caché sin recalcular en cada frame."""
+    ang_key = int(round(angulo)) % 360
+    cache_key = (clave_asset, w, h, ang_key)
+    cached = _CACHE_PNG_ESCALADOS.get(cache_key)
+    if cached is not None:
+        return cached
+
+    scaled = cv2.resize(base_np, (w, h), interpolation=cv2.INTER_LINEAR)
+    if ang_key != 0:
+        cx_r, cy_r = w * 0.5, h * 0.5
+        mat_rot = cv2.getRotationMatrix2D((cx_r, cy_r), float(ang_key), 1.0)
+        scaled = cv2.warpAffine(
+            scaled,
+            mat_rot,
+            (w, h),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(0, 0, 0, 0),
+        )
+
+    if len(_CACHE_PNG_ESCALADOS) > 400:
+        _CACHE_PNG_ESCALADOS.clear()
+    _CACHE_PNG_ESCALADOS[cache_key] = scaled
+    return scaled
+
+
 class GestorEfectosYAssets:
     """
     Gestiona:
@@ -394,8 +430,8 @@ class GestorEfectosYAssets:
             alpha_f = 1.0
 
         diam_actual = max(48, int(round(diam_base * escala)))
-        circ_scaled = cv2.resize(
-            self.circulo_base_np, (diam_actual, diam_actual), interpolation=cv2.INTER_LINEAR
+        circ_scaled = _obtener_asset_escalado_cache(
+            "circulo_rojo", self.circulo_base_np, diam_actual, diam_actual, 0.0
         )
         tx, ty = int(round(target_xy[0])), int(round(target_xy[1]))
         estampar_rgba_en_rgb_inplace(lienzo, circ_scaled, tx, ty, opacidad_extra=alpha_f)
@@ -451,20 +487,9 @@ class GestorEfectosYAssets:
             alpha_f = 1.0
 
         tam_flecha = max(96, int(round(355 * escala_in)))
-        fl_scaled = cv2.resize(
-            self.flecha_base_np, (tam_flecha, tam_flecha), interpolation=cv2.INTER_LINEAR
+        fl_scaled = _obtener_asset_escalado_cache(
+            "flecha_roja", self.flecha_base_np, tam_flecha, tam_flecha, angulo_grados
         )
-        if abs(angulo_grados) > 0.5:
-            cx_f, cy_f = tam_flecha * 0.5, tam_flecha * 0.5
-            mat_rot = cv2.getRotationMatrix2D((cx_f, cy_f), angulo_grados, 1.0)
-            fl_scaled = cv2.warpAffine(
-                fl_scaled,
-                mat_rot,
-                (tam_flecha, tam_flecha),
-                flags=cv2.INTER_LINEAR,
-                borderMode=cv2.BORDER_CONSTANT,
-                borderValue=(0, 0, 0, 0),
-            )
 
         gap_objetivo = (radio_circulo_activo + 8.0) if radio_circulo_activo > 10.0 else 6.0
         rebote = 10.0 * (1.0 - math.cos(t_seg * math.pi * 2.2)) * 0.5
@@ -576,9 +601,6 @@ class GestorEfectosYAssets:
 
         tam_base = 245
         tam_actual = max(32, int(round(tam_base * escala_anim)))
-        em_scaled = cv2.resize(
-            base_np, (tam_actual, tam_actual), interpolation=cv2.INTER_LINEAR
-        )
 
         # Ángulo dinámico o personalizado (@rot)
         rot_manual = 0.0
@@ -588,17 +610,9 @@ class GestorEfectosYAssets:
             rot_manual = float(m_rot.group(1))
 
         angulo = rot_manual + 7.5 * math.sin(t_seg * 5.8)
-        if abs(angulo) > 0.4:
-            cx_e, cy_e = tam_actual * 0.5, tam_actual * 0.5
-            mat_rot = cv2.getRotationMatrix2D((cx_e, cy_e), angulo, 1.0)
-            em_scaled = cv2.warpAffine(
-                em_scaled,
-                mat_rot,
-                (tam_actual, tam_actual),
-                flags=cv2.INTER_LINEAR,
-                borderMode=cv2.BORDER_CONSTANT,
-                borderValue=(0, 0, 0, 0),
-            )
+        em_scaled = _obtener_asset_escalado_cache(
+            f"emoji_{nombre_emoji}", base_np, tam_actual, tam_actual, angulo
+        )
 
         pos_efectiva = pos_str.replace(f"@{m_rot.group(1)}", "") if m_rot else pos_str
         es_fijo = "fijo:" in pos_efectiva

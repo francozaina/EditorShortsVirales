@@ -832,6 +832,14 @@ class BloqueGuionCard(ctk.CTkFrame):
         self.entry_texto.grid(row=0, column=0, sticky="ew")
         self.entry_texto.bind("<KeyRelease>", self._on_texto_edit)
 
+    def refrescar_tiempos_ui(self):
+        """Actualiza los entries de tiempo y el semáforo in-place sin destruir ni recrear la tarjeta."""
+        self.entry_t_ini.delete(0, "end")
+        self.entry_t_ini.insert(0, seg_a_mmss(self.datos["t_ini"]))
+        self.entry_t_fin.delete(0, "end")
+        self.entry_t_fin.insert(0, seg_a_mmss(self.datos["t_fin"]))
+        self._actualizar_semaforo_palabras()
+
     def _on_fin_edited(self, _event=None):
         try:
             nuevo_fin = mmss_a_seg(self.entry_t_fin.get())
@@ -859,8 +867,10 @@ class BloqueGuionCard(ctk.CTkFrame):
             pass
 
     def _asegurar_assets_frame(self):
-        """Instancia los selectores organizados en filas compactas para visibilidad total sin desborde."""
+        """Instancia o muestra los selectores organizados en filas compactas sin recrear widgets."""
         if self._assets_creados:
+            if hasattr(self, "assets_frame") and self.assets_frame.winfo_exists():
+                self.assets_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=4)
             return
         self._assets_creados = True
 
@@ -989,16 +999,15 @@ class BloqueGuionCard(ctk.CTkFrame):
         )
 
     def _destruir_assets_frame(self):
-        """Libera la memoria de Tkinter destruyendo los OptionMenus de la tarjeta."""
+        """Oculta los assets in-place para máxima velocidad sin destruir widgets."""
         if not self._assets_creados:
             return
         try:
             self._guardar_valores_assets_a_datos()
-            self.assets_frame.destroy()
+            if hasattr(self, "assets_frame") and self.assets_frame.winfo_exists():
+                self.assets_frame.grid_remove()
         except Exception:
             pass
-        self._assets_creados = False
-        self._altura_visible = False
 
     def _guardar_valores_assets_a_datos(self):
         if not self._assets_creados:
@@ -1024,7 +1033,9 @@ class BloqueGuionCard(ctk.CTkFrame):
             self._asegurar_assets_frame()
             self.btn_toggle_card_assets.configure(text="▲ Ocultar", fg_color="#3B4261")
         else:
-            self._destruir_assets_frame()
+            self._sincronizar_estado()
+            if hasattr(self, "assets_frame") and self.assets_frame.winfo_exists():
+                self.assets_frame.grid_remove()
             self.btn_toggle_card_assets.configure(text="🎛️ Assets", fg_color="#22283A")
         self.on_change()
 
@@ -1152,7 +1163,9 @@ class VisualScriptEditor(ctk.CTkFrame):
                 c._asegurar_assets_frame()
                 c.btn_toggle_card_assets.configure(text="▲ Ocultar", fg_color="#3B4261")
             else:
-                c._destruir_assets_frame()
+                c._sincronizar_estado()
+                if hasattr(c, "assets_frame") and c.assets_frame.winfo_exists():
+                    c.assets_frame.grid_remove()
                 c.btn_toggle_card_assets.configure(text="🎛️ Assets", fg_color="#22283A")
 
     def _toggle_vista(self):
@@ -1302,6 +1315,15 @@ class VisualScriptEditor(ctk.CTkFrame):
         return "\n".join(lineas)
 
     def _actualizar_raw_interno(self):
+        if getattr(self, "_debounce_raw_id", None):
+            try:
+                self.after_cancel(self._debounce_raw_id)
+            except Exception:
+                pass
+        self._debounce_raw_id = self.after(120, self._ejecutar_actualizacion_raw)
+
+    def _ejecutar_actualizacion_raw(self):
+        self._debounce_raw_id = None
         if getattr(self, "_actualizando_raw", False):
             return
         self._actualizando_raw = True
@@ -1338,7 +1360,7 @@ class VisualScriptEditor(ctk.CTkFrame):
             self.cards.append(card)
 
     def _on_block_time_edited(self, idx: int, campo: str, nuevo_seg: float):
-        """Efecto dominó (Ripple Time): sincroniza el fin de un bloque con el inicio del siguiente."""
+        """Efecto dominó (Ripple Time): sincroniza el fin de un bloque con el inicio del siguiente in-place."""
         if 0 <= idx < len(self.bloques):
             if campo == "fin":
                 self.bloques[idx]["t_fin"] = nuevo_seg
@@ -1348,24 +1370,36 @@ class VisualScriptEditor(ctk.CTkFrame):
                     sig["t_ini"] = nuevo_seg
                     if sig["t_fin"] <= sig["t_ini"]:
                         sig["t_fin"] = sig["t_ini"] + dur_sig
-                    if idx + 1 < len(self.cards):
-                        c_sig = self.cards[idx + 1]
-                        c_sig.entry_t_ini.delete(0, "end")
-                        c_sig.entry_t_ini.insert(0, seg_a_mmss(sig["t_ini"]))
-                        c_sig.entry_t_fin.delete(0, "end")
-                        c_sig.entry_t_fin.insert(0, seg_a_mmss(sig["t_fin"]))
-                        c_sig._actualizar_semaforo_palabras()
+                    for j in range(idx, len(self.cards)):
+                        if j < len(self.bloques):
+                            self.cards[j].datos = self.bloques[j]
+                            self.cards[j].refrescar_tiempos_ui()
             elif campo == "ini":
                 self.bloques[idx]["t_ini"] = nuevo_seg
                 if idx > 0:
                     ant = self.bloques[idx - 1]
                     ant["t_fin"] = nuevo_seg
                     if idx - 1 < len(self.cards):
-                        c_ant = self.cards[idx - 1]
-                        c_ant.entry_t_fin.delete(0, "end")
-                        c_ant.entry_t_fin.insert(0, seg_a_mmss(nuevo_seg))
-                        c_ant._actualizar_semaforo_palabras()
+                        self.cards[idx - 1].datos = ant
+                        self.cards[idx - 1].refrescar_tiempos_ui()
+                if idx < len(self.cards):
+                    self.cards[idx].datos = self.bloques[idx]
+                    self.cards[idx].refrescar_tiempos_ui()
 
+            self._actualizar_raw_interno()
+
+    def _ajustar_tiempo_cascada(self, idx: int, delta_seg: float):
+        """Ajusta tiempos en cascada in-place en 0ms sin destruir widgets."""
+        if 0 <= idx < len(self.bloques):
+            self.bloques[idx]["t_fin"] = max(self.bloques[idx]["t_ini"] + 0.5, self.bloques[idx]["t_fin"] + delta_seg)
+            for j in range(idx + 1, len(self.bloques)):
+                dur = max(0.5, self.bloques[j]["t_fin"] - self.bloques[j]["t_ini"])
+                self.bloques[j]["t_ini"] = self.bloques[j - 1]["t_fin"]
+                self.bloques[j]["t_fin"] = self.bloques[j]["t_ini"] + dur
+            for j in range(idx, len(self.cards)):
+                if j < len(self.bloques):
+                    self.cards[j].datos = self.bloques[j]
+                    self.cards[j].refrescar_tiempos_ui()
             self._actualizar_raw_interno()
 
     def _mover_bloque(self, idx: int, direccion: int):

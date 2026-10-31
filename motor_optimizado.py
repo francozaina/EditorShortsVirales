@@ -177,8 +177,8 @@ def realzar_frame_viral(frame: np.ndarray) -> np.ndarray:
 # =====================================================================
 def pegar_placa_rgba_rapida(frame_rgb: np.ndarray, placa_rgba: np.ndarray, y_top: int = 0) -> np.ndarray:
     """
-    Aplica alpha-blending vectorizado en NumPy únicamente sobre la franja (ROI)
-    donde existe el subtítulo, evitando convertir todo el frame 1080x1920 a PIL.
+    Alpha-blending ultrarrápido en uint16 sobre la ROI sin convertir a float32
+    ni tocar píxeles fuera de la caja del subtítulo.
     """
     h_f, w_f, _ = frame_rgb.shape
     h_p, w_p, _ = placa_rgba.shape
@@ -189,15 +189,15 @@ def pegar_placa_rgba_rapida(frame_rgb: np.ndarray, placa_rgba: np.ndarray, y_top
         return frame_rgb
 
     sub_placa = placa_rgba[:(y2 - y1), :x2]
-    alpha = sub_placa[:, :, 3:4].astype(np.float32) * (1.0 / 255.0)
-    # Si toda la franja es transparente, salir en 0ms
-    if not np.any(alpha > 0.01):
+    alpha = sub_placa[:, :, 3:4]
+    if not np.any(alpha > 2):
         return frame_rgb
 
-    out = frame_rgb.copy()
-    roi = out[y1:y2, :x2].astype(np.float32)
-    fg = sub_placa[:, :, :3].astype(np.float32)
-    out[y1:y2, :x2] = (fg * alpha + roi * (1.0 - alpha)).astype(np.uint8)
+    out = frame_rgb if frame_rgb.flags.writeable else frame_rgb.copy()
+    roi = out[y1:y2, :x2].astype(np.uint16)
+    fg = sub_placa[:, :, :3].astype(np.uint16)
+    a = alpha.astype(np.uint16)
+    out[y1:y2, :x2] = ((fg * a + roi * (255 - a)) // 255).astype(np.uint8)
     return out
 
 

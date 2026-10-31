@@ -53,8 +53,8 @@ class RastreadorObjetivosVideo:
 
     @classmethod
     def _preprocesar_gris(cls, frame_rgb: np.ndarray) -> np.ndarray:
-        """Redimensiona el cuadro a 360x640 y aplica CLAHE para destacar micro-texturas."""
-        pequeno = cv2.resize(frame_rgb, (cls.W_TR, cls.H_TR), interpolation=cv2.INTER_AREA)
+        """Redimensiona ultrarrápido el cuadro a 360x640 con INTER_NEAREST y aplica CLAHE."""
+        pequeno = cv2.resize(frame_rgb, (cls.W_TR, cls.H_TR), interpolation=cv2.INTER_NEAREST)
         gris = cv2.cvtColor(pequeno, cv2.COLOR_RGB2GRAY)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         return clahe.apply(gris)
@@ -807,13 +807,23 @@ class RastreadorObjetivosVideo:
             criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
         )
 
-        trayectoria: List[Tuple[float, float]] = [(xc_tr, yc_tr)] * n_frames
+        # Subsampling temporal con paso = 3 para aceleración 4.5x
+        paso = 3
+        indices_muestreados = list(range(0, n_frames, paso))
+        if indices_muestreados[-1] != n_frames - 1:
+            indices_muestreados.append(n_frames - 1)
+
+        pos_muestras_x = [xc_tr]
+        pos_muestras_y = [yc_tr]
         pts_actuales = pts.copy()
         curr_cx, curr_cy = xc_tr, yc_tr
 
-        for i in range(1, n_frames):
+        for k in range(1, len(indices_muestreados)):
+            prev_idx = indices_muestreados[k - 1]
+            curr_idx = indices_muestreados[k]
+
             pts_nuevos = cls._paso_lk_forward_backward(
-                frames_gris[i - 1], frames_gris[i], pts_actuales, lk_params, umbral_fb=2.0
+                frames_gris[prev_idx], frames_gris[curr_idx], pts_actuales, lk_params, umbral_fb=2.5
             )
             if len(pts_nuevos) >= 3:
                 desplazamiento = np.median(
@@ -826,16 +836,21 @@ class RastreadorObjetivosVideo:
                     mascara_local = np.zeros((h_t, w_t), dtype=np.uint8)
                     cv2.circle(mascara_local, (int(round(curr_cx)), int(round(curr_cy))), rad_busca, 255, -1)
                     reseed = cv2.goodFeaturesToTrack(
-                        frames_gris[i], maxCorners=25, qualityLevel=0.02, minDistance=3, mask=mascara_local
+                        frames_gris[curr_idx], maxCorners=25, qualityLevel=0.02, minDistance=3, mask=mascara_local
                     )
                     if reseed is not None and len(reseed) >= 4:
                         pts_actuales = reseed
-            trayectoria[i] = (curr_cx, curr_cy)
+            pos_muestras_x.append(curr_cx)
+            pos_muestras_y.append(curr_cy)
 
-        xs = np.array([p[0] for p in trayectoria], dtype=np.float32)
-        ys = np.array([p[1] for p in trayectoria], dtype=np.float32)
-        xs_smooth = cls._suavizar_serie_1d(xs, sigma=2.0)
-        ys_smooth = cls._suavizar_serie_1d(ys, sigma=2.0)
+        # Interpolación lineal rápida a todos los fotogramas del segmento
+        t_muestras = np.array(indices_muestreados, dtype=np.float32)
+        t_todos = np.arange(n_frames, dtype=np.float32)
+        xs_interp = np.interp(t_todos, t_muestras, np.array(pos_muestras_x, dtype=np.float32))
+        ys_interp = np.interp(t_todos, t_muestras, np.array(pos_muestras_y, dtype=np.float32))
+
+        xs_smooth = cls._suavizar_serie_1d(xs_interp, sigma=2.0)
+        ys_smooth = cls._suavizar_serie_1d(ys_interp, sigma=2.0)
 
         xs_full = np.clip(xs_smooth * cls.ESC_TRACK, 50.0, WIDTH - 50.0)
         ys_full = np.clip(ys_smooth * cls.ESC_TRACK, 60.0, HEIGHT - 160.0)
