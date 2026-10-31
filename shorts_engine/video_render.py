@@ -529,7 +529,31 @@ class GestorEfectosYAssets:
     ) -> None:
         if not nombre_emoji:
             return
+
+        # Soporte para múltiples emojis en escena separados por '+'
+        if "+" in str(nombre_emoji):
+            for sub_em in str(nombre_emoji).split("+"):
+                sub_em = sub_em.strip()
+                if not sub_em:
+                    continue
+                nom_s = sub_em
+                pos_s = posicion_solicitada
+                if ":" in sub_em:
+                    nom_s, pos_s = sub_em.split(":", 1)
+                self.dibujar_emoji(lienzo, nom_s, pos_s, target_principal_xy, t_seg, dur_seg)
+            return
+
+        if ":" in str(nombre_emoji):
+            p_nom, p_pos = str(nombre_emoji).split(":", 1)
+            nombre_emoji = p_nom
+            if posicion_solicitada in ("", "auto", "multi"):
+                posicion_solicitada = p_pos
+
         clave = _quitar_acentos(str(nombre_emoji).strip().lower())
+        if clave.startswith("fijo:"):
+            clave = clave[5:]
+            posicion_solicitada = f"fijo:{posicion_solicitada}"
+
         base_np = self.emojis_cache_np.get(clave)
         if base_np is None:
             return
@@ -556,7 +580,14 @@ class GestorEfectosYAssets:
             base_np, (tam_actual, tam_actual), interpolation=cv2.INTER_LINEAR
         )
 
-        angulo = 7.5 * math.sin(t_seg * 5.8)
+        # Ángulo dinámico o personalizado (@rot)
+        rot_manual = 0.0
+        pos_str = str(posicion_solicitada or "")
+        m_rot = re.search(r"@(\d+(?:\.\d+)?)", pos_str)
+        if m_rot:
+            rot_manual = float(m_rot.group(1))
+
+        angulo = rot_manual + 7.5 * math.sin(t_seg * 5.8)
         if abs(angulo) > 0.4:
             cx_e, cy_e = tam_actual * 0.5, tam_actual * 0.5
             mat_rot = cv2.getRotationMatrix2D((cx_e, cy_e), angulo, 1.0)
@@ -569,17 +600,9 @@ class GestorEfectosYAssets:
                 borderValue=(0, 0, 0, 0),
             )
 
-        pos_efectiva = posicion_solicitada
-        if target_principal_xy is not None:
-            tx, ty = target_principal_xy
-            if pos_efectiva == "auto":
-                pos_efectiva = "izquierda" if tx >= WIDTH * 0.5 else "derecha"
-            elif pos_efectiva == "derecha" and tx > WIDTH * 0.62 and abs(ty - 340) < 230:
-                pos_efectiva = "izquierda"
-            elif pos_efectiva == "izquierda" and tx < WIDTH * 0.38 and abs(ty - 340) < 230:
-                pos_efectiva = "derecha"
-        elif pos_efectiva == "auto":
-            pos_efectiva = "derecha"
+        pos_efectiva = pos_str.replace(f"@{m_rot.group(1)}", "") if m_rot else pos_str
+        es_fijo = "fijo:" in pos_efectiva
+        pos_efectiva = pos_efectiva.replace("fijo:", "")
 
         pos_map = {
             "derecha": (WIDTH - 195, 330),
@@ -589,9 +612,31 @@ class GestorEfectosYAssets:
             "centro": (WIDTH // 2, 340),
             "abajo": (WIDTH - 195, 1060),
         }
-        cx, cy = pos_map.get(pos_efectiva, pos_map["derecha"])
-        cy += int(round(9.0 * math.sin(t_seg * 6.2)))
 
+        # Soporte para coordenadas X, Y porcentuales
+        m_coord = re.search(r"(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", pos_efectiva)
+        if m_coord:
+            cx = int(round((float(m_coord.group(1)) / 100.0) * WIDTH))
+            cy = int(round((float(m_coord.group(2)) / 100.0) * HEIGHT))
+        else:
+            if target_principal_xy is not None and not es_fijo:
+                tx, ty = target_principal_xy
+                if pos_efectiva == "auto":
+                    pos_efectiva = "izquierda" if tx >= WIDTH * 0.5 else "derecha"
+                elif pos_efectiva == "derecha" and tx > WIDTH * 0.62 and abs(ty - 340) < 230:
+                    pos_efectiva = "izquierda"
+                elif pos_efectiva == "izquierda" and tx < WIDTH * 0.38 and abs(ty - 340) < 230:
+                    pos_efectiva = "derecha"
+            elif pos_efectiva == "auto":
+                pos_efectiva = "derecha"
+            cx, cy = pos_map.get(pos_efectiva, pos_map["derecha"])
+
+        if not es_fijo and target_principal_xy is not None and m_coord:
+            tx, ty = target_principal_xy
+            cx = int(round(cx * 0.75 + tx * 0.25))
+            cy = int(round(cy * 0.75 + ty * 0.25))
+
+        cy += int(round(9.0 * math.sin(t_seg * 6.2)))
         estampar_rgba_en_rgb_inplace(lienzo, em_scaled, cx, cy, opacidad_extra=alpha_factor)
 
 

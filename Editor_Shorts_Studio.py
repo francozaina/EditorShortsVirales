@@ -4909,17 +4909,20 @@ def iniciar_aplicacion_gui() -> None:
         hdr_inner = ctk.CTkFrame(hdr, fg_color="transparent")
         hdr_inner.pack(fill="x", padx=16, pady=8)
 
-        lbl_estado = ctk.CTkLabel(
-            hdr_inner,
-            text=(
-                "Edición Manual · Redactá el Guion y Efectos"
-                if es_modo_manual_inicial
-                else ("Video editado listo" if es_modo_editado else "Short listo para publicar")
-            ),
-            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
-            text_color=TEXT_MAIN,
-        )
-        lbl_estado.pack(side="left")
+        lbl_texto_estado = ""
+        if es_modo_manual_inicial:
+            lbl_texto_estado = "Edición Manual · Redactá el Guion y Efectos"
+        elif es_modo_editado:
+            lbl_texto_estado = "Video editado listo"
+
+        if lbl_texto_estado:
+            lbl_estado = ctk.CTkLabel(
+                hdr_inner,
+                text=lbl_texto_estado,
+                font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
+                text_color=TEXT_MAIN,
+            )
+            lbl_estado.pack(side="left")
 
 
 

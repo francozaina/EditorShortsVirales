@@ -197,15 +197,23 @@ def _normalizar_emoji(emoji_raw: Optional[str]) -> Tuple[Optional[str], str]:
     if not emoji_raw:
         return None, "auto"
     raw = str(emoji_raw).strip()
+    if not raw or raw.lower() in ("ninguno", "ninguna", "none", "no", "false", "-", "flecha", "circulo"):
+        return None, "auto"
+
+    if "+" in raw:
+        return raw, "multi"
+
     posicion = "auto"
     if ":" in raw:
         raw, pos_part = raw.split(":", 1)
         pos_clean = _quitar_acentos(pos_part.strip().lower())
-        if pos_clean in ("izquierda", "derecha", "centro", "arriba", "abajo", "arriba_izq", "arriba_der"):
-            posicion = pos_clean
+        posicion = pos_clean
 
     e = _quitar_acentos(raw.strip().lower())
     e = e.replace(".png", "").replace(".webp", "").replace(".jpg", "")
+    if e.startswith("fijo:"):
+        e = e[len("fijo:"):]
+        posicion = f"fijo:{posicion}"
     if e.startswith("emoji_"):
         e = e[len("emoji_"):]
 

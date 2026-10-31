@@ -76,6 +76,16 @@ def mmss_a_seg(texto: str) -> float:
     return 0.0
 
 
+def _quitar_acentos(texto: str) -> str:
+    import unicodedata
+    if not texto:
+        return ""
+    return "".join(
+        c for c in unicodedata.normalize("NFD", str(texto))
+        if unicodedata.category(c) != "Mn"
+    )
+
+
 def _extraer_frame_pil(ruta_video, t_seg: float, w: int = 270, h: int = 480):
     """Extrae un fotograma exacto del video a t_seg y lo devuelve redimensionado en PIL.Image."""
     if not ruta_video:
@@ -110,11 +120,12 @@ def abrir_dialogo_posicion_pantalla(
     import re
     import math
     from PIL import Image, ImageTk
+    from pathlib import Path
 
     win_p = ctk.CTkToplevel(parent_win)
-    win_p.title("🎯 Posicionar Círculo, Flechas y Altura de Texto")
-    win_p.geometry("390x860")
-    win_p.minsize(360, 780)
+    win_p.title("Editor de Flechas, Círculos y Emojis")
+    win_p.geometry("380x820")
+    win_p.minsize(360, 720)
     win_p.resizable(False, True)
     win_p.configure(fg_color="#0e111a")
     win_p.transient(parent_win)
@@ -122,290 +133,524 @@ def abrir_dialogo_posicion_pantalla(
 
     t_ini = float(datos_bloque.get("t_ini", 0.0))
     t_fin = float(datos_bloque.get("t_fin", 4.0))
+    if t_fin <= t_ini:
+        t_fin = t_ini + 3.0
+    t_actual = t_ini
 
-    img_pil_ini = _extraer_frame_pil(ruta_video, t_ini)
-    img_pil_fin = _extraer_frame_pil(ruta_video, max(t_ini, t_fin - 0.1))
-
-    photo_ini = ImageTk.PhotoImage(img_pil_ini) if img_pil_ini else None
-    photo_fin = ImageTk.PhotoImage(img_pil_fin) if img_pil_fin else None
-    frame_activo = [photo_ini]
-
-    tipo_var = ctk.StringVar(value="circulo")
-    tam_var = ctk.StringVar(value="medio")
-    track_var = ctk.BooleanVar(value=True)
-    rot_var = ctk.DoubleVar(value=315.0)
-
-    # Altura inicial de subtítulos (por defecto 70%)
-    alt_raw = str(datos_bloque.get("altura", "70%")).strip().lower()
-    alt_val = 70.0
-    if "arriba" in alt_raw:
-        alt_val = 30.0
-    elif "medio" in alt_raw or "centro" in alt_raw:
-        alt_val = 50.0
-    elif "muy_abajo" in alt_raw or "fondo" in alt_raw:
-        alt_val = 82.0
-    elif "abajo" in alt_raw:
-        alt_val = 70.0
-    else:
-        m_a = re.search(r"(\d+(?:\.\d+)?)", alt_raw)
-        if m_a:
-            v_n = float(m_a.group(1))
-            alt_val = (v_n / 1920.0 * 100.0) if v_n > 100.0 else v_n
-    alt_val = max(15.0, min(85.0, alt_val))
-    altura_var = ctk.DoubleVar(value=alt_val)
-
-    c_ini = str(datos_bloque.get("circulo", "")).strip()
-    f_ini = str(datos_bloque.get("flecha", "")).strip()
-
-    pos_x = 50.0
-    pos_y = 45.0
-
-    tiene_c = c_ini and c_ini.lower() not in ("ninguno", "ninguna", "none", "no")
-    tiene_f = f_ini and f_ini.lower() not in ("ninguno", "ninguna", "none", "no")
-
-    if tiene_c and tiene_f:
-        tipo_var.set("ambos")
-    elif tiene_f:
-        tipo_var.set("flecha")
-    elif tiene_c:
-        tipo_var.set("circulo")
-    else:
-        tipo_var.set("circulo")
-
-    m_c = re.search(r"(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", c_ini or f_ini)
-    if m_c:
-        pos_x = float(m_c.group(1))
-        pos_y = float(m_c.group(2))
-    if ":chico" in c_ini:
-        tam_var.set("chico")
-    elif ":grande" in c_ini:
-        tam_var.set("grande")
-    if "fijo:" in c_ini or "static:" in c_ini or "fijo:" in f_ini or "static:" in f_ini:
-        track_var.set(False)
-
-    m_rot = re.search(r"@(\d+(?:\.\d+)?)", f_ini)
-    if m_rot:
-        try:
-            rot_var.set(float(m_rot.group(1)) % 360.0)
-        except Exception:
-            pass
-
-    hdr_frame = ctk.CTkFrame(win_p, fg_color="transparent")
-    hdr_frame.pack(fill="x", padx=16, pady=(8, 2))
-
-    lbl_coord = ctk.CTkLabel(
-        hdr_frame, text=f"🎯 Objetivo: X: {pos_x:.1f}% | Y: {pos_y:.1f}%",
-        font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-        text_color="#38bdf8"
-    )
-    lbl_coord.pack(side="left")
-
-    if on_preview_live is not None:
-        try:
-            on_preview_live("seek", t_ini, "", "", 0)
-        except Exception:
-            pass
-
-    if photo_ini or photo_fin:
-        def _seleccionar_frame(op: str):
-            if "Inicio" in op or f"{t_ini:.1f}" in op:
-                frame_activo[0] = photo_ini
-                if on_preview_live is not None:
-                    try:
-                        on_preview_live("seek", t_ini, "", "", 0)
-                    except Exception:
-                        pass
-            else:
-                frame_activo[0] = photo_fin if photo_fin else photo_ini
-                if on_preview_live is not None:
-                    try:
-                        on_preview_live("seek", t_fin, "", "", 0)
-                    except Exception:
-                        pass
-            _redibujar()
-
-        btn_toggle_frame = ctk.CTkSegmentedButton(
-            hdr_frame,
-            values=[f"◀ {t_ini:.1f}s", f"▶ {t_fin:.1f}s"],
-            command=_seleccionar_frame,
-            width=110, height=22, font=ctk.CTkFont(size=10, weight="bold"),
-            selected_color="#1d4ed8", selected_hover_color="#1e40af",
-        )
-        btn_toggle_frame.set(f"◀ {t_ini:.1f}s")
-        btn_toggle_frame.pack(side="right")
-
-    # Canvas de 270x480 (Exactamente idéntico al reproductor de video 9:16)
     CW, CH = 270, 480
+
+    frame_cache = {}
+
+    def _obtener_frame(t: float):
+        t_key = round(float(t), 1)
+        if t_key not in frame_cache:
+            img = _extraer_frame_pil(ruta_video, t_key, CW, CH)
+            frame_cache[t_key] = ImageTk.PhotoImage(img) if img else None
+        return frame_cache[t_key]
+
+    frame_activo = [_obtener_frame(t_ini)]
+
+    assets_pil = {}
+    rutas_flecha = [Path("assets/fotos/flecha.png"), Path("assets/emojis/flecha.png")]
+    for rf in rutas_flecha:
+        if rf.exists():
+            try:
+                assets_pil["flecha"] = Image.open(rf).convert("RGBA")
+                break
+            except Exception:
+                pass
+
+    rutas_circulo = [Path("assets/fotos/circulo_rojo.png"), Path("assets/fotos/circulo.png"), Path("assets/emojis/circulo_rojo.png")]
+    for rc in rutas_circulo:
+        if rc.exists():
+            try:
+                assets_pil["circulo"] = Image.open(rc).convert("RGBA")
+                break
+            except Exception:
+                pass
+
+    EMOJIS_CATALOGO = [
+        "calavera", "cerebro", "diablo", "enojo", "fiesta",
+        "fuego", "lloro", "ojos", "risa", "sorprendido", "sueno"
+    ]
+    emojis_dir = Path("assets/emojis")
+    for nom in EMOJIS_CATALOGO:
+        p_em = emojis_dir / f"emoji_{nom}.png"
+        if p_em.exists():
+            try:
+                assets_pil[nom] = Image.open(p_em).convert("RGBA")
+            except Exception:
+                pass
+
+    class SpriteItem:
+        def __init__(self, tipo: str, nombre: str, x: float, y: float, scale: float = 1.0, rot: float = 0.0, tracking: bool = True):
+            self.tipo = str(tipo)
+            self.nombre = str(nombre)
+            self.x = max(5.0, min(95.0, float(x)))
+            self.y = max(5.0, min(95.0, float(y)))
+            self.scale = max(0.4, min(2.5, float(scale)))
+            self.rot = float(rot) % 360.0
+            self.tracking = bool(tracking)
+
+    sprites: List[SpriteItem] = []
+    selected_sprite: Optional[SpriteItem] = None
+
+    pos_keyword_map = {
+        "derecha": (78.0, 32.0),
+        "izquierda": (22.0, 32.0),
+        "centro": (50.0, 45.0),
+        "arriba": (50.0, 20.0),
+        "abajo": (50.0, 80.0),
+        "arriba_der": (78.0, 20.0),
+        "arriba_izq": (22.0, 20.0),
+        "abajo_der": (78.0, 80.0),
+        "abajo_izq": (22.0, 80.0),
+        "auto": (78.0, 32.0),
+    }
+
+    # 1. Círculo existente
+    c_raw = str(datos_bloque.get("circulo", "")).strip()
+    if c_raw and c_raw.lower() not in ("ninguno", "ninguna", "none", "no"):
+        is_track = "fijo:" not in c_raw.lower() and "static:" not in c_raw.lower()
+        c_clean = c_raw.lower().replace("fijo:", "").replace("static:", "").strip()
+        sc = 1.3 if ":grande" in c_clean else (0.7 if ":chico" in c_clean else 1.0)
+        m_c = re.search(r"(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", c_clean)
+        if m_c:
+            cx, cy = float(m_c.group(1)), float(m_c.group(2))
+        else:
+            k = c_clean.split(":")[0].strip()
+            cx, cy = pos_keyword_map.get(k, (50.0, 45.0))
+        sprites.append(SpriteItem("circulo", "circulo", cx, cy, scale=sc, rot=0.0, tracking=is_track))
+
+    # 2. Flecha existente
+    f_raw = str(datos_bloque.get("flecha", "")).strip()
+    if f_raw and f_raw.lower() not in ("ninguno", "ninguna", "none", "no"):
+        is_track = "fijo:" not in f_raw.lower() and "static:" not in f_raw.lower()
+        f_clean = f_raw.lower().replace("fijo:", "").replace("static:", "").strip()
+        m_rot = re.search(r"@(\d+(?:\.\d+)?)", f_clean)
+        rot_val = float(m_rot.group(1)) if m_rot else 315.0
+        m_f = re.search(r"(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", f_clean)
+        if m_f:
+            fx, fy = float(m_f.group(1)), float(m_f.group(2))
+        else:
+            k = f_clean.split("@")[0].strip()
+            fx, fy = pos_keyword_map.get(k, (50.0, 50.0))
+        sprites.append(SpriteItem("flecha", "flecha", fx, fy, scale=1.0, rot=rot_val, tracking=is_track))
+
+    # 3. Emojis existentes (múltiples con +)
+    e_raw = str(datos_bloque.get("emoji", "")).strip()
+    if e_raw and e_raw.lower() not in ("ninguno", "ninguna", "none", "no"):
+        partes = e_raw.split("+") if "+" in e_raw else [e_raw]
+        for p in partes:
+            p = p.strip()
+            if not p or p.lower() in ("ninguno", "ninguna", "none", "no"):
+                continue
+            is_track = "fijo:" not in p.lower() and "static:" not in p.lower()
+            p_clean = p.replace("fijo:", "").replace("static:", "").strip()
+            m_rot = re.search(r"@(\d+(?:\.\d+)?)", p_clean)
+            rot_val = float(m_rot.group(1)) if m_rot else 0.0
+            p_nom_pos = p_clean.split("@")[0].strip()
+            if ":" in p_nom_pos:
+                nom_e, pos_e = p_nom_pos.split(":", 1)
+            else:
+                nom_e, pos_e = p_nom_pos, "derecha"
+            nom_clean = _quitar_acentos(nom_e.strip().lower())
+            if nom_clean.startswith("emoji_"):
+                nom_clean = nom_clean[6:]
+            m_e = re.search(r"(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", pos_e)
+            if m_e:
+                ex, ey = float(m_e.group(1)), float(m_e.group(2))
+            else:
+                ex, ey = pos_keyword_map.get(pos_e.strip().lower(), (78.0, 32.0))
+            sprites.append(SpriteItem("emoji", nom_clean, ex, ey, scale=1.0, rot=rot_val, tracking=is_track))
+
+    if sprites:
+        selected_sprite = sprites[0]
+
+    # Canvas vertical 9:16
     canvas = tk.Canvas(win_p, width=CW, height=CH, bg="#050811", highlightthickness=1, highlightbackground="#252B3D")
-    canvas.pack(pady=4)
+    canvas.pack(pady=(8, 2))
+
+    cached_photos = []
 
     def _redibujar():
         canvas.delete("all")
+        cached_photos.clear()
 
-        # 1. Fotograma real de fondo
+        # Fondo de video
         if frame_activo[0] is not None:
-            canvas.create_image(0, 0, image=frame_activo[0], anchor="nw", tags="bg_video")
+            canvas.create_image(0, 0, image=frame_activo[0], anchor="nw")
         else:
             canvas.create_rectangle(0, 0, CW, CH, fill="#050811", outline="")
 
-        # 2. Guías sutiles de composición
+        # Guías 3x3 sutiles
         dash_col = "#2a3754" if frame_activo[0] is None else "#334155"
         canvas.create_line(CW * 0.33, 0, CW * 0.33, CH, fill=dash_col, dash=(2, 3))
         canvas.create_line(CW * 0.66, 0, CW * 0.66, CH, fill=dash_col, dash=(2, 3))
         canvas.create_line(0, CH * 0.33, CW, CH * 0.33, fill=dash_col, dash=(2, 3))
         canvas.create_line(0, CH * 0.66, CW, CH * 0.66, fill=dash_col, dash=(2, 3))
 
-        # 3. Guía visual y caja de subtítulos a la altura elegida
-        alt_pct = altura_var.get()
-        lbl_alt_val.configure(text=f"📏 Altura Subtítulos (Y): {alt_pct:.0f}%")
-        sub_y = (alt_pct / 100.0) * CH
+        # Sprites
+        for s in sprites:
+            base_img = None
+            base_sz = 62
+            if s.tipo == "flecha":
+                base_img = assets_pil.get("flecha")
+                base_sz = 60
+            elif s.tipo == "circulo":
+                base_img = assets_pil.get("circulo")
+                base_sz = 68
+            elif s.tipo == "emoji":
+                base_img = assets_pil.get(s.nombre, assets_pil.get("sorprendido"))
+                base_sz = 62
 
-        canvas.create_line(0, sub_y, CW, sub_y, fill="#10b981", dash=(4, 3), width=1.5)
+            cx = int(round((s.x / 100.0) * CW))
+            cy = int(round((s.y / 100.0) * CH))
+            dim = max(24, int(round(base_sz * s.scale)))
 
-        snippet = str(datos_bloque.get("texto", "")).strip()
-        if len(snippet) > 26:
-            snippet = snippet[:24] + "..."
-        if not snippet:
-            snippet = f"Subtítulos ({alt_pct:.0f}%)"
+            if base_img is not None:
+                try:
+                    img_scaled = base_img.resize((dim, dim), Image.Resampling.BILINEAR)
+                    if abs(s.rot) > 0.5:
+                        img_scaled = img_scaled.rotate(-s.rot, resample=Image.Resampling.BICUBIC, expand=True)
+                    photo = ImageTk.PhotoImage(img_scaled)
+                    cached_photos.append(photo)
+                    canvas.create_image(cx, cy, image=photo, anchor="center")
+                except Exception:
+                    pass
+            else:
+                if s.tipo == "circulo":
+                    r = dim // 2
+                    canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline="#ef4444", width=3)
+                elif s.tipo == "flecha":
+                    rad = math.radians(s.rot)
+                    fx = cx + 25 * math.cos(rad)
+                    fy = cy + 25 * math.sin(rad)
+                    canvas.create_line(fx, fy, cx, cy, fill="#f59e0b", width=3, arrow=tk.LAST)
+                else:
+                    canvas.create_rectangle(cx - 20, cy - 20, cx + 20, cy + 20, fill="#f59e0b", outline="")
 
-        bw, bh = 210, 24
-        bx0 = (CW - bw) // 2
-        by0 = sub_y - (bh // 2)
-        canvas.create_rectangle(bx0 - 1, by0 - 1, bx0 + bw + 1, by0 + bh + 1, fill="#000000", outline="#10b981", width=1.5)
-        canvas.create_rectangle(bx0, by0, bx0 + bw, by0 + bh, fill="#0a1926", outline="")
-        canvas.create_text(CW // 2, sub_y, text=f"💬 {snippet}", fill="#38bdf8", font=("Segoe UI", 8, "bold"))
+            # Marco de selección estilo Word si está seleccionado
+            if s == selected_sprite:
+                hw = max(14, int(round(dim * 0.5)))
+                hh = max(14, int(round(dim * 0.5)))
+                bx0, by0 = cx - hw, cy - hh
+                bx1, by1 = cx + hw, cy + hh
 
-        # 4. Círculo y Flecha
-        px = (pos_x / 100.0) * CW
-        py = (pos_y / 100.0) * CH
+                canvas.create_rectangle(bx0, by0, bx1, by1, outline="#38bdf8", width=1.8, dash=(4, 3))
 
-        t = tipo_var.get()
-        tam = tam_var.get()
-        r_px = 22 if tam == "chico" else (32 if tam == "medio" else 44)
+                for hx, hy in [(bx0, by0), (bx1, by0), (bx0, by1), (bx1, by1)]:
+                    canvas.create_rectangle(hx - 4, hy - 4, hx + 4, hy + 4, fill="#ffffff", outline="#0284c7", width=1.5)
 
-        if t in ("circulo", "ambos"):
-            canvas.create_oval(px - r_px - 2, py - r_px - 2, px + r_px + 2, py + r_px + 2, outline="#000000", width=5)
-            canvas.create_oval(px - r_px, py - r_px, px + r_px, py + r_px, outline="#ef4444", width=3)
-            canvas.create_line(px - 8, py, px + 8, py, fill="#000000", width=3)
-            canvas.create_line(px - 8, py, px + 8, py, fill="#38bdf8", width=1.5)
-            canvas.create_line(px, py - 8, px, py + 8, fill="#000000", width=3)
-            canvas.create_line(px, py - 8, px, py + 8, fill="#38bdf8", width=1.5)
-            canvas.create_oval(px - 3, py - 3, px + 3, py + 3, fill="#38bdf8", outline="#000000", width=1)
+                stem_y = by0 - 22
+                canvas.create_line(cx, by0, cx, stem_y, fill="#38bdf8", width=1.8)
+                canvas.create_oval(cx - 6, stem_y - 6, cx + 6, stem_y + 6, fill="#10b981", outline="#ffffff", width=1.5)
 
-        if t in ("flecha", "ambos"):
-            rad = math.radians(rot_var.get())
-            dist_flecha = 60
-            fx0 = px + dist_flecha * math.cos(rad)
-            fy0 = py + dist_flecha * math.sin(rad)
-            gap_c = (r_px + 4) if t == "ambos" else 0
-            tip_x = px + gap_c * math.cos(rad)
-            tip_y = py + gap_c * math.sin(rad)
+    drag_mode = None
+    drag_offset_x = 0.0
+    drag_offset_y = 0.0
+    drag_start_scale = 1.0
+    drag_start_dist = 1.0
+    drag_start_rot = 0.0
+    drag_start_angle = 0.0
 
-            canvas.create_line(fx0, fy0, tip_x, tip_y, fill="#000000", width=7, arrow=tk.LAST, arrowshape=(18, 20, 8))
-            canvas.create_line(fx0, fy0, tip_x, tip_y, fill="#f59e0b", width=3.5, arrow=tk.LAST, arrowshape=(15, 17, 6))
-            canvas.create_oval(tip_x - 5, tip_y - 5, tip_x + 5, tip_y + 5, outline="#000000", width=3)
-            canvas.create_oval(tip_x - 5, tip_y - 5, tip_x + 5, tip_y + 5, outline="#38bdf8", width=1.5)
-            canvas.create_oval(tip_x - 2, tip_y - 2, tip_x + 2, tip_y + 2, fill="#38bdf8", outline="")
+    def _on_canvas_press(event):
+        nonlocal drag_mode, drag_offset_x, drag_offset_y
+        nonlocal drag_start_scale, drag_start_dist, drag_start_rot, drag_start_angle
+        nonlocal selected_sprite
 
-        if t == "circulo":
-            lbl_coord.configure(text=f"🎯 Centro Círculo: X: {pos_x:.1f}% | Y: {pos_y:.1f}%")
-        elif t == "flecha":
-            lbl_coord.configure(text=f"🎯 Punta Flecha: X: {pos_x:.1f}% | Y: {pos_y:.1f}%")
-        elif t == "ambos":
-            lbl_coord.configure(text=f"🎯 Objetivo: X: {pos_x:.1f}% | Y: {pos_y:.1f}%")
-        else:
-            lbl_coord.configure(text="Sin señalar")
+        mx, my = event.x, event.y
 
-        lbl_rot_val.configure(text=f"🔄 Ángulo Flecha: {rot_var.get():.0f}°")
+        if selected_sprite is not None:
+            cx = (selected_sprite.x / 100.0) * CW
+            cy = (selected_sprite.y / 100.0) * CH
+            base_sz = 68 if selected_sprite.tipo == "circulo" else 62
+            dim = max(24, int(round(base_sz * selected_sprite.scale)))
+            hw = max(14, int(round(dim * 0.5)))
+            hh = max(14, int(round(dim * 0.5)))
+            bx0, by0 = cx - hw, cy - hh
+            bx1, by1 = cx + hw, cy + hh
+            stem_y = by0 - 22
 
+            # Mango de rotación
+            if math.hypot(mx - cx, my - stem_y) <= 12:
+                drag_mode = "rotate"
+                drag_start_rot = selected_sprite.rot
+                drag_start_angle = math.degrees(math.atan2(my - cy, mx - cx))
+                return
+
+            # 4 esquinas de escala
+            for hx, hy in [(bx0, by0), (bx1, by0), (bx0, by1), (bx1, by1)]:
+                if abs(mx - hx) <= 8 and abs(my - hy) <= 8:
+                    drag_mode = "scale"
+                    drag_start_scale = selected_sprite.scale
+                    drag_start_dist = max(10.0, math.hypot(mx - cx, my - cy))
+                    return
+
+        # Clic dentro de cuerpo de sprite
+        for s in reversed(sprites):
+            scx = (s.x / 100.0) * CW
+            scy = (s.y / 100.0) * CH
+            base_sz = 68 if s.tipo == "circulo" else 62
+            dim = max(24, int(round(base_sz * s.scale)))
+            hw = max(14, int(round(dim * 0.5)))
+            hh = max(14, int(round(dim * 0.5)))
+            if abs(mx - scx) <= hw + 6 and abs(my - scy) <= hh + 6:
+                selected_sprite = s
+                drag_mode = "move"
+                drag_offset_x = mx - scx
+                drag_offset_y = my - scy
+                _actualizar_panel_seleccion()
+                _actualizar_cuadrillas()
+                _redibujar()
+                return
+
+        # Clic en vacío
+        selected_sprite = None
+        drag_mode = None
+        _actualizar_panel_seleccion()
+        _actualizar_cuadrillas()
+        _redibujar()
+
+    def _on_canvas_drag(event):
+        nonlocal selected_sprite
+        if selected_sprite is None or drag_mode is None:
+            return
+
+        mx, my = event.x, event.y
+        scx = (selected_sprite.x / 100.0) * CW
+        scy = (selected_sprite.y / 100.0) * CH
+
+        if drag_mode == "move":
+            ncx = max(10, min(CW - 10, mx - drag_offset_x))
+            ncy = max(10, min(CH - 10, my - drag_offset_y))
+            selected_sprite.x = (ncx / float(CW)) * 100.0
+            selected_sprite.y = (ncy / float(CH)) * 100.0
+            _actualizar_panel_seleccion()
+            _redibujar()
+
+        elif drag_mode == "scale":
+            curr_dist = math.hypot(mx - scx, my - scy)
+            ratio = curr_dist / max(10.0, drag_start_dist)
+            selected_sprite.scale = max(0.4, min(2.5, drag_start_scale * ratio))
+            _actualizar_panel_seleccion()
+            _redibujar()
+
+        elif drag_mode == "rotate":
+            curr_angle = math.degrees(math.atan2(my - scy, mx - scx))
+            delta = curr_angle - drag_start_angle
+            selected_sprite.rot = (drag_start_rot + delta) % 360.0
+            _actualizar_panel_seleccion()
+            _redibujar()
+
+    def _on_canvas_release(event):
+        nonlocal drag_mode
+        drag_mode = None
+
+    canvas.bind("<Button-1>", _on_canvas_press)
+    canvas.bind("<B1-Motion>", _on_canvas_drag)
+    canvas.bind("<ButtonRelease-1>", _on_canvas_release)
+
+    # Scrubber de tiempo
+    f_time = ctk.CTkFrame(win_p, fg_color="transparent")
+    f_time.pack(fill="x", padx=16, pady=(3, 2))
+
+    lbl_t_ini = ctk.CTkLabel(f_time, text=f"{t_ini:.1f}s", font=ctk.CTkFont(size=11, weight="bold"), text_color="#94a3b8")
+    lbl_t_ini.pack(side="left")
+
+    lbl_t_cur = ctk.CTkLabel(f_time, text=f"⏱ {t_actual:.1f}s", font=ctk.CTkFont(size=11, weight="bold"), text_color="#38bdf8")
+    lbl_t_cur.pack(side="left", padx=8)
+
+    lbl_t_fin = ctk.CTkLabel(f_time, text=f"{t_fin:.1f}s", font=ctk.CTkFont(size=11, weight="bold"), text_color="#94a3b8")
+    lbl_t_fin.pack(side="right")
+
+    def _on_time_slider(val):
+        nonlocal t_actual
+        t_actual = float(val)
+        lbl_t_cur.configure(text=f"⏱ {t_actual:.1f}s")
+        frame_activo[0] = _obtener_frame(t_actual)
         if on_preview_live is not None:
             try:
-                on_preview_live(pos_x, pos_y, t, tam, rot_var.get(), alt_pct)
+                on_preview_live("seek", t_actual, "", "", 0)
+            except Exception:
+                pass
+        _redibujar()
+
+    n_pasos = max(10, int(round((t_fin - t_ini) * 20)))
+    slider_time = ctk.CTkSlider(
+        f_time, from_=t_ini, to=max(t_ini + 0.1, t_fin), number_of_steps=n_pasos,
+        command=_on_time_slider, height=14, progress_color="#38bdf8", button_color="#38bdf8"
+    )
+    slider_time.set(t_ini)
+    slider_time.pack(side="left", fill="x", expand=True, padx=4)
+
+    # Cuadrillas (Flecha y Círculo)
+    f_cuad = ctk.CTkFrame(win_p, fg_color="transparent")
+    f_cuad.pack(fill="x", padx=16, pady=(2, 2))
+
+    def _toggle_flecha():
+        nonlocal selected_sprite
+        f_exist = next((s for s in sprites if s.tipo == "flecha"), None)
+        if f_exist:
+            sprites.remove(f_exist)
+            if selected_sprite == f_exist:
+                selected_sprite = None
+        else:
+            sp = SpriteItem("flecha", "flecha", 50.0, 50.0, scale=1.0, rot=315.0, tracking=True)
+            sprites.append(sp)
+            selected_sprite = sp
+        _actualizar_panel_seleccion()
+        _actualizar_cuadrillas()
+        _redibujar()
+
+    def _toggle_circulo():
+        nonlocal selected_sprite
+        c_exist = next((s for s in sprites if s.tipo == "circulo"), None)
+        if c_exist:
+            sprites.remove(c_exist)
+            if selected_sprite == c_exist:
+                selected_sprite = None
+        else:
+            sp = SpriteItem("circulo", "circulo", 50.0, 45.0, scale=1.0, rot=0.0, tracking=True)
+            sprites.append(sp)
+            selected_sprite = sp
+        _actualizar_panel_seleccion()
+        _actualizar_cuadrillas()
+        _redibujar()
+
+    btn_cuad_flecha = ctk.CTkButton(
+        f_cuad, text="➔ Flecha", height=30, font=ctk.CTkFont(size=12, weight="bold"),
+        fg_color="#181f33", hover_color="#27324f", command=_toggle_flecha
+    )
+    btn_cuad_flecha.pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+    btn_cuad_circulo = ctk.CTkButton(
+        f_cuad, text="◯ Círculo", height=30, font=ctk.CTkFont(size=12, weight="bold"),
+        fg_color="#181f33", hover_color="#27324f", command=_toggle_circulo
+    )
+    btn_cuad_circulo.pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+    def _actualizar_cuadrillas():
+        tiene_f = any(s.tipo == "flecha" for s in sprites)
+        tiene_c = any(s.tipo == "circulo" for s in sprites)
+        btn_cuad_flecha.configure(
+            fg_color="#1d4ed8" if tiene_f else "#181f33",
+            text="✓ Flecha Activa" if tiene_f else "➔ Flecha"
+        )
+        btn_cuad_circulo.configure(
+            fg_color="#b91c1c" if tiene_c else "#181f33",
+            text="✓ Círculo Activo" if tiene_c else "◯ Círculo"
+        )
+
+    # Grilla estilo WhatsApp de Emojis
+    f_em_box = ctk.CTkFrame(win_p, fg_color="#111624", corner_radius=8, border_width=1, border_color="#1f273b")
+    f_em_box.pack(fill="x", padx=16, pady=(3, 3))
+
+    lbl_em_title = ctk.CTkLabel(
+        f_em_box, text="🎭 Emojis (Toca para agregar a la pantalla)",
+        font=ctk.CTkFont(size=11, weight="bold"), text_color="#94a3b8"
+    )
+    lbl_em_title.pack(anchor="w", padx=8, pady=(4, 2))
+
+    f_em_grid = ctk.CTkFrame(f_em_box, fg_color="transparent")
+    f_em_grid.pack(padx=6, pady=(0, 6))
+
+    emoji_thumbnails = {}
+    for nom in EMOJIS_CATALOGO:
+        p_em = emojis_dir / f"emoji_{nom}.png"
+        if p_em.exists():
+            try:
+                im = Image.open(p_em).convert("RGBA")
+                emoji_thumbnails[nom] = ctk.CTkImage(light_image=im, dark_image=im, size=(26, 26))
             except Exception:
                 pass
 
-    def _on_canvas_click(event):
-        nonlocal pos_x, pos_y
-        pos_x = max(5.0, min(95.0, (event.x / float(CW)) * 100.0))
-        pos_y = max(6.0, min(94.0, (event.y / float(CH)) * 100.0))
+    def _agregar_emoji(nom_em: str):
+        nonlocal selected_sprite
+        n_existentes = len([s for s in sprites if s.tipo == "emoji"])
+        offset_x = (n_existentes % 4) * 8.0
+        offset_y = (n_existentes % 4) * 6.0
+        sp = SpriteItem("emoji", nom_em, 76.0 - offset_x, 30.0 + offset_y, scale=1.0, rot=0.0, tracking=True)
+        sprites.append(sp)
+        selected_sprite = sp
+        _actualizar_panel_seleccion()
         _redibujar()
 
-    canvas.bind("<Button-1>", _on_canvas_click)
-    canvas.bind("<B1-Motion>", _on_canvas_click)
+    for idx, nom in enumerate(EMOJIS_CATALOGO):
+        r = 0 if idx < 6 else 1
+        c = idx if idx < 6 else idx - 6
+        thumb = emoji_thumbnails.get(nom)
+        btn_e = ctk.CTkButton(
+            f_em_grid,
+            image=thumb,
+            text="" if thumb else nom[:3],
+            width=46,
+            height=34,
+            corner_radius=6,
+            fg_color="#181f33",
+            hover_color="#2b3658",
+            command=lambda n=nom: _agregar_emoji(n),
+        )
+        btn_e.grid(row=r, column=c, padx=3, pady=2)
 
-    f_ctrls = ctk.CTkFrame(win_p, fg_color="transparent")
-    f_ctrls.pack(fill="x", padx=16, pady=(4, 2))
+    # Panel de Sprite Seleccionado
+    f_sel = ctk.CTkFrame(win_p, fg_color="#141824", corner_radius=8, border_width=1, border_color="#222b40")
+    f_sel.pack(fill="x", padx=16, pady=(3, 3))
 
-    tipo_seg_ini = "⭕ Círculo" if tipo_var.get() == "circulo" else ("↗️ Flecha" if tipo_var.get() == "flecha" else ("⭕+↗️ Ambos" if tipo_var.get() == "ambos" else "❌ Ninguno"))
-    ctk.CTkSegmentedButton(
-        f_ctrls, values=["⭕ Círculo", "↗️ Flecha", "⭕+↗️ Ambos", "❌ Ninguno"],
-        variable=ctk.StringVar(value=tipo_seg_ini),
-        command=lambda v: (tipo_var.set("circulo" if "Círculo" in v else ("flecha" if "Flecha" in v else ("ambos" if "Ambos" in v else "ninguno"))), _redibujar()),
-        height=26, corner_radius=8, font=ctk.CTkFont(size=11, weight="bold")
-    ).pack(fill="x", pady=2)
+    lbl_sel_info = ctk.CTkLabel(
+        f_sel, text="Toca un sprite en pantalla para moverlo o girarlo",
+        font=ctk.CTkFont(size=11, weight="bold"), text_color="#64748b"
+    )
+    lbl_sel_info.pack(side="left", padx=(8, 4), pady=4)
 
-    row_opt = ctk.CTkFrame(f_ctrls, fg_color="transparent")
-    row_opt.pack(fill="x", pady=2)
+    var_tracking = ctk.BooleanVar(value=True)
 
-    ctk.CTkOptionMenu(
-        row_opt, values=["chico", "medio", "grande"], variable=tam_var,
-        command=lambda _: _redibujar(), width=90, height=24, corner_radius=6, font=ctk.CTkFont(size=11)
-    ).pack(side="left", padx=(0, 8))
+    def _on_toggle_tracking():
+        if selected_sprite is not None:
+            selected_sprite.tracking = var_tracking.get()
 
-    ctk.CTkCheckBox(
-        row_opt, text="Seguir objeto (Tracking IA)", variable=track_var,
+    chk_tracking = ctk.CTkCheckBox(
+        f_sel, text="Tracking IA", variable=var_tracking, command=_on_toggle_tracking,
         font=ctk.CTkFont(size=11, weight="bold"), checkbox_width=18, checkbox_height=18, corner_radius=4
-    ).pack(side="left")
-
-    f_rot = ctk.CTkFrame(f_ctrls, fg_color="transparent")
-    f_rot.pack(fill="x", pady=(2, 2))
-
-    lbl_rot_val = ctk.CTkLabel(
-        f_rot, text=f"🔄 Ángulo Flecha: {rot_var.get():.0f}°",
-        font=ctk.CTkFont(size=11, weight="bold"), text_color="#fbbf24"
     )
-    lbl_rot_val.pack(anchor="w")
+    chk_tracking.pack(side="right", padx=(4, 8), pady=4)
 
-    slider_rot = ctk.CTkSlider(
-        f_rot, from_=0.0, to=360.0, number_of_steps=72, variable=rot_var,
-        command=lambda _: _redibujar(), height=14, progress_color="#f59e0b", button_color="#f59e0b"
+    def _quitar_sprite_seleccionado():
+        nonlocal selected_sprite
+        if selected_sprite is not None and selected_sprite in sprites:
+            sprites.remove(selected_sprite)
+            selected_sprite = None
+            _actualizar_panel_seleccion()
+            _actualizar_cuadrillas()
+            _redibujar()
+
+    btn_quitar = ctk.CTkButton(
+        f_sel, text="🗑 Quitar", fg_color="#45121b", hover_color="#881337",
+        width=60, height=24, font=ctk.CTkFont(size=11, weight="bold"),
+        command=_quitar_sprite_seleccionado
     )
-    slider_rot.pack(fill="x", pady=1)
+    btn_quitar.pack(side="right", padx=4, pady=4)
 
-    row_presets_rot = ctk.CTkFrame(f_rot, fg_color="transparent")
-    row_presets_rot.pack(fill="x")
-    for nom_btn, deg_val in [("↖", 315.0), ("↑", 270.0), ("↗", 225.0), ("→", 180.0), ("↘", 135.0), ("↓", 90.0), ("↙", 45.0), ("←", 0.0)]:
-        ctk.CTkButton(
-            row_presets_rot, text=nom_btn, width=28, height=20, corner_radius=5,
-            fg_color="#1e2436", hover_color="#2d354d", font=ctk.CTkFont(size=10, weight="bold"),
-            command=lambda d=deg_val: (rot_var.set(d), slider_rot.set(d), _redibujar())
-        ).pack(side="left", padx=1)
+    def _actualizar_panel_seleccion():
+        if selected_sprite is not None:
+            nom_dsp = selected_sprite.nombre.title()
+            lbl_sel_info.configure(
+                text=f"🎯 {nom_dsp} ({selected_sprite.x:.0f}%, {selected_sprite.y:.0f}%) | {selected_sprite.rot:.0f}°",
+                text_color="#38bdf8"
+            )
+            var_tracking.set(selected_sprite.tracking)
+            chk_tracking.configure(state="normal")
+            btn_quitar.configure(state="normal")
+        else:
+            lbl_sel_info.configure(
+                text="Toca un sprite para mover, estirar o girar",
+                text_color="#64748b"
+            )
+            chk_tracking.configure(state="disabled")
+            btn_quitar.configure(state="disabled")
 
-    # Control de Altura de Subtítulos
-    f_alt = ctk.CTkFrame(f_ctrls, fg_color="transparent")
-    f_alt.pack(fill="x", pady=(4, 2))
-
-    lbl_alt_val = ctk.CTkLabel(
-        f_alt, text=f"📏 Altura Subtítulos (Y): {altura_var.get():.0f}%",
-        font=ctk.CTkFont(size=11, weight="bold"), text_color="#10b981"
-    )
-    lbl_alt_val.pack(anchor="w")
-
-    slider_alt = ctk.CTkSlider(
-        f_alt, from_=15.0, to=85.0, number_of_steps=70, variable=altura_var,
-        command=lambda _: _redibujar(), height=14, progress_color="#10b981", button_color="#10b981"
-    )
-    slider_alt.pack(fill="x", pady=1)
-
-    row_presets_alt = ctk.CTkFrame(f_alt, fg_color="transparent")
-    row_presets_alt.pack(fill="x")
-    for nom_btn, alt_p in [("Arriba (30%)", 30.0), ("Medio (50%)", 50.0), ("Abajo (70%)", 70.0), ("Fondo (82%)", 82.0)]:
-        ctk.CTkButton(
-            row_presets_alt, text=nom_btn, height=22, corner_radius=5,
-            fg_color="#1e2436", hover_color="#2d354d", font=ctk.CTkFont(size=10, weight="bold"),
-            command=lambda v=alt_p: (altura_var.set(v), slider_alt.set(v), _redibujar())
-        ).pack(side="left", padx=2, expand=True, fill="x")
-
+    _actualizar_cuadrillas()
+    _actualizar_panel_seleccion()
     _redibujar()
 
     def _al_cerrar():
@@ -417,24 +662,43 @@ def abrir_dialogo_posicion_pantalla(
         win_p.destroy()
 
     def _guardar_y_cerrar():
-        t = tipo_var.get()
-        tam = tam_var.get()
-        tracking = track_var.get()
-        pref = "" if tracking else "fijo:"
-        rot_val = int(round(rot_var.get())) % 360
-        res_circulo = f"{pref}{pos_x:.1f},{pos_y:.1f}:{tam}" if t in ("circulo", "ambos") else "ninguno"
-        res_flecha = f"{pref}{pos_x:.1f},{pos_y:.1f}@{rot_val}" if t in ("flecha", "ambos") else "ninguna"
-        res_altura = f"{int(round(altura_var.get()))}%"
-        on_aplicar(res_circulo, res_flecha, res_altura)
+        c_s = next((s for s in sprites if s.tipo == "circulo"), None)
+        if c_s:
+            tam = "chico" if c_s.scale < 0.8 else ("grande" if c_s.scale > 1.3 else "medio")
+            pref = "" if c_s.tracking else "fijo:"
+            res_circulo = f"{pref}{c_s.x:.1f},{c_s.y:.1f}:{tam}"
+        else:
+            res_circulo = "ninguno"
+
+        f_s = next((s for s in sprites if s.tipo == "flecha"), None)
+        if f_s:
+            pref = "" if f_s.tracking else "fijo:"
+            rot_int = int(round(f_s.rot)) % 360
+            res_flecha = f"{pref}{f_s.x:.1f},{f_s.y:.1f}@{rot_int}"
+        else:
+            res_flecha = "ninguna"
+
+        e_s_list = [s for s in sprites if s.tipo == "emoji"]
+        if e_s_list:
+            parts = []
+            for s in e_s_list:
+                pref = "" if s.tracking else "fijo:"
+                rot_str = f"@{int(round(s.rot)) % 360}" if abs(s.rot) > 1 else ""
+                parts.append(f"{pref}{s.nombre}:{s.x:.1f},{s.y:.1f}{rot_str}")
+            res_emoji = "+".join(parts)
+        else:
+            res_emoji = "ninguno"
+
+        on_aplicar(res_circulo, res_flecha, res_emoji)
         _al_cerrar()
 
     win_p.protocol("WM_DELETE_WINDOW", _al_cerrar)
 
     ctk.CTkButton(
-        win_p, text="Aplicar Posición y Altura", command=_guardar_y_cerrar,
-        corner_radius=10, height=32, fg_color="#10b981", hover_color="#059669",
+        win_p, text="Guardar Cambios", command=_guardar_y_cerrar,
+        corner_radius=10, height=34, fg_color="#10b981", hover_color="#059669",
         text_color="#052e16", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold")
-    ).pack(fill="x", padx=16, pady=(4, 10))
+    ).pack(fill="x", padx=16, pady=(6, 10))
 
 
 class BloqueGuionCard(ctk.CTkFrame):
@@ -591,7 +855,7 @@ class BloqueGuionCard(ctk.CTkFrame):
             pass
 
     def _asegurar_assets_frame(self):
-        """Instancia los selectores organizados en 2 filas compactas para visibilidad total sin desborde."""
+        """Instancia los selectores organizados en filas compactas para visibilidad total sin desborde."""
         if self._assets_creados:
             return
         self._assets_creados = True
@@ -599,12 +863,12 @@ class BloqueGuionCard(ctk.CTkFrame):
         self.assets_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.assets_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=4)
 
-        # Fila 1: Efecto, SFX 1, SFX 2, Emoji
+        # Fila 1: Efecto, SFX 1, SFX 2
         row_assets_1 = ctk.CTkFrame(self.assets_frame, fg_color="transparent")
         row_assets_1.pack(fill="x", pady=(0, 4))
 
         self.opt_efecto = self._crear_selector(
-            row_assets_1, "🎥 Efecto", LISTA_EFECTOS, self.datos.get("efecto", "ninguno"), width=118
+            row_assets_1, "🎥 Efecto", LISTA_EFECTOS, self.datos.get("efecto", "ninguno"), width=125
         )
 
         sfx_partes = [s.strip() for s in str(self.datos.get("sfx", "")).split("+") if s.strip()]
@@ -612,22 +876,19 @@ class BloqueGuionCard(ctk.CTkFrame):
         sfx2_val = sfx_partes[1] if len(sfx_partes) >= 2 else "ninguno"
 
         self.opt_sfx1 = self._crear_selector(
-            row_assets_1, "🔊 SFX 1", LISTA_SFX, sfx1_val, width=118
+            row_assets_1, "🔊 SFX 1", LISTA_SFX, sfx1_val, width=125
         )
         self.opt_sfx2 = self._crear_selector(
-            row_assets_1, "🔊 SFX 2", LISTA_SFX, sfx2_val, width=118
-        )
-        self.opt_emoji = self._crear_selector(
-            row_assets_1, "🎭 Emoji", LISTA_EMOJIS, self.datos.get("emoji", "ninguno"), width=130
+            row_assets_1, "🔊 SFX 2", LISTA_SFX, sfx2_val, width=125
         )
 
-        # Fila 2: Botón único para posicionar y badge de estado
+        # Fila 2: Botón Flechas/Círculos y Botón Altura Texto
         row_assets_2 = ctk.CTkFrame(self.assets_frame, fg_color="transparent")
         row_assets_2.pack(fill="x", pady=(2, 2))
 
         btn_pos = ctk.CTkButton(
             row_assets_2,
-            text="🎯 Posicionar en Pantalla (Clic/Arrastrar)",
+            text="Flechas/Círculos",
             command=self._abrir_selector_posicion,
             height=28,
             fg_color="#1d4ed8",
@@ -636,17 +897,20 @@ class BloqueGuionCard(ctk.CTkFrame):
         )
         btn_pos.pack(side="left", padx=(4, 8))
 
-        self.lbl_pos_status = ctk.CTkLabel(
+        self.btn_alt_toggle = ctk.CTkButton(
             row_assets_2,
-            text=self._generar_texto_badge_pos(),
+            text="📏 Altura Texto",
+            command=self._toggle_frame_altura,
+            height=28,
+            fg_color="#1e2436",
+            hover_color="#2d354d",
             font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="#38bdf8",
         )
-        self.lbl_pos_status.pack(side="left", padx=4)
+        self.btn_alt_toggle.pack(side="left", padx=4)
 
-        # Fila 3: Editor de altura del texto / subtítulos para esta sección
-        row_alt = ctk.CTkFrame(self.assets_frame, fg_color="transparent")
-        row_alt.pack(fill="x", pady=(3, 2))
+        # Fila de Altura de Texto (oculta por defecto, se despliega con '📏 Altura Texto')
+        self.frame_altura = ctk.CTkFrame(self.assets_frame, fg_color="#121623", corner_radius=6)
+        self._altura_visible = False
 
         alt_val_ini = 70.0
         m_a = re.search(r"(\d+(?:\.\d+)?)", str(self.datos.get("altura", "70%")))
@@ -657,12 +921,12 @@ class BloqueGuionCard(ctk.CTkFrame):
         self.altura_card_var = ctk.DoubleVar(value=alt_val_ini)
 
         self.lbl_alt_card = ctk.CTkLabel(
-            row_alt,
+            self.frame_altura,
             text=f"📏 Altura Texto: {alt_val_ini:.0f}%",
             font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="#10b981",
+            text_color="#ffffff",
         )
-        self.lbl_alt_card.pack(side="left", padx=(4, 6))
+        self.lbl_alt_card.pack(side="left", padx=(8, 10), pady=4)
 
         def _on_slider_alt_change(val: float):
             alt_int = int(round(val))
@@ -675,52 +939,35 @@ class BloqueGuionCard(ctk.CTkFrame):
                 except Exception:
                     pass
 
-        slider_alt_card = ctk.CTkSlider(
-            row_alt,
+        self.slider_alt_card = ctk.CTkSlider(
+            self.frame_altura,
             from_=15.0, to=85.0, number_of_steps=70,
             variable=self.altura_card_var,
             command=_on_slider_alt_change,
-            width=120, height=14,
-            progress_color="#10b981", button_color="#10b981"
+            width=160, height=14,
+            progress_color="#ffffff", button_color="#ffffff"
         )
-        slider_alt_card.pack(side="left", padx=(0, 6))
+        self.slider_alt_card.pack(side="left", padx=(0, 8), pady=4)
 
-        for nom_p, v_p in [("Arriba (30%)", 30.0), ("Medio (50%)", 50.0), ("Abajo (70%)", 70.0)]:
-            def _preset_click(v=v_p):
-                self.altura_card_var.set(v)
-                _on_slider_alt_change(v)
-            ctk.CTkButton(
-                row_alt, text=nom_p, width=74, height=22, corner_radius=5,
-                fg_color="#1e2436", hover_color="#2d354d", font=ctk.CTkFont(size=10, weight="bold"),
-                command=_preset_click
-            ).pack(side="left", padx=2)
-
-    def _generar_texto_badge_pos(self) -> str:
-        c = str(self.datos.get("circulo", "")).strip()
-        f = str(self.datos.get("flecha", "")).strip()
-        tiene_c = c and c.lower() not in ("ninguno", "ninguna", "none", "no")
-        tiene_f = f and f.lower() not in ("ninguno", "ninguna", "none", "no")
-        if tiene_c and tiene_f:
-            return f"⭕ Círculo + ↗️ Flecha activos"
-        elif tiene_c:
-            return f"⭕ Círculo: {c}"
-        elif tiene_f:
-            return f"↗️ Flecha: {f}"
-        return "Sin señalar"
+    def _toggle_frame_altura(self):
+        if not hasattr(self, "frame_altura") or not self.frame_altura.winfo_exists():
+            return
+        if getattr(self, "_altura_visible", False):
+            self.frame_altura.pack_forget()
+            self._altura_visible = False
+            if hasattr(self, "btn_alt_toggle") and self.btn_alt_toggle.winfo_exists():
+                self.btn_alt_toggle.configure(fg_color="#1e2436")
+        else:
+            self.frame_altura.pack(fill="x", pady=(3, 2))
+            self._altura_visible = True
+            if hasattr(self, "btn_alt_toggle") and self.btn_alt_toggle.winfo_exists():
+                self.btn_alt_toggle.configure(fg_color="#334155")
 
     def _abrir_selector_posicion(self):
-        def _on_aplicar(c_val, f_val, a_val):
+        def _on_aplicar(c_val, f_val, e_val):
             self.datos["circulo"] = c_val
             self.datos["flecha"] = f_val
-            self.datos["altura"] = a_val
-            if hasattr(self, "altura_card_var"):
-                m_a = re.search(r"(\d+(?:\.\d+)?)", str(a_val))
-                if m_a:
-                    self.altura_card_var.set(float(m_a.group(1)))
-            if hasattr(self, "lbl_alt_card") and self.lbl_alt_card.winfo_exists():
-                self.lbl_alt_card.configure(text=f"📏 Altura Texto: {a_val}")
-            if hasattr(self, "lbl_pos_status") and self.lbl_pos_status.winfo_exists():
-                self.lbl_pos_status.configure(text=self._generar_texto_badge_pos())
+            self.datos["emoji"] = e_val
             self.on_change()
 
         abrir_dialogo_posicion_pantalla(
@@ -741,6 +988,7 @@ class BloqueGuionCard(ctk.CTkFrame):
         except Exception:
             pass
         self._assets_creados = False
+        self._altura_visible = False
 
     def _guardar_valores_assets_a_datos(self):
         if not self._assets_creados:
@@ -757,10 +1005,6 @@ class BloqueGuionCard(ctk.CTkFrame):
                 self.datos["sfx"] = s2
             else:
                 self.datos["sfx"] = "ninguno"
-
-            self.datos["emoji"] = self.opt_emoji.get()
-            self.datos["flecha"] = self.opt_flecha.get()
-            self.datos["circulo"] = self.opt_circulo.get()
         except Exception:
             pass
 
