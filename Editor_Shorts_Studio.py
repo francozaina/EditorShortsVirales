@@ -1912,20 +1912,13 @@ def iniciar_aplicacion_gui() -> None:
 
         def _mostrar_ayuda_cuota_yt():
             win_h = ctk.CTkToplevel(win)
+            win_h.withdraw()
             win_h.title("Guía de Cuota de YouTube")
-            win_h.geometry("490x240")
             win_h.resizable(False, False)
+            win_h.configure(fg_color=BG_DARK)
             aplicar_icono_ventana(win_h)
             win_h.transient(win)
             win_h.grab_set()
-
-            try:
-                win_h.update_idletasks()
-                x = win.winfo_x() + (win.winfo_width() // 2) - 245
-                y = win.winfo_y() + (win.winfo_height() // 2) - 120
-                win_h.geometry(f"+{max(0, x)}+{max(0, y)}")
-            except Exception:
-                pass
 
             f_c = ctk.CTkFrame(win_h, fg_color="#101524", corner_radius=16, border_width=1, border_color="#222b42")
             f_c.pack(fill="both", expand=True, padx=14, pady=14)
@@ -1944,6 +1937,7 @@ def iniciar_aplicacion_gui() -> None:
                 text_color="#cbd5e1",
                 justify="left",
                 anchor="w",
+                wraplength=480,
             ).pack(fill="x", padx=16, pady=(0, 14))
 
             ctk.CTkButton(
@@ -1957,6 +1951,17 @@ def iniciar_aplicacion_gui() -> None:
                 hover_color=PURPLE_HOVER,
                 font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             ).pack(pady=(0, 6))
+
+            win_h.update_idletasks()
+            w_req = max(520, win_h.winfo_reqwidth())
+            h_req = win_h.winfo_reqheight() + 10
+            try:
+                x = win.winfo_x() + (win.winfo_width() // 2) - (w_req // 2)
+                y = win.winfo_y() + (win.winfo_height() // 2) - (h_req // 2)
+                win_h.geometry(f"{w_req}x{h_req}+{max(0, x)}+{max(0, y)}")
+            except Exception:
+                win_h.geometry(f"{w_req}x{h_req}")
+            win_h.deiconify()
 
         btn_ayuda_cuota_yt = ctk.CTkButton(
             top_cuota_aj,
@@ -2002,20 +2007,13 @@ def iniciar_aplicacion_gui() -> None:
 
         def _mostrar_ayuda_cuotas():
             win_h = ctk.CTkToplevel(win)
+            win_h.withdraw()
             win_h.title("Guía de Colores y Cuotas")
-            win_h.geometry("580x360")
             win_h.resizable(False, False)
+            win_h.configure(fg_color=BG_DARK)
             aplicar_icono_ventana(win_h)
             win_h.transient(win)
             win_h.grab_set()
-
-            try:
-                win_h.update_idletasks()
-                x = win.winfo_x() + (win.winfo_width() // 2) - 290
-                y = win.winfo_y() + (win.winfo_height() // 2) - 180
-                win_h.geometry(f"+{max(0, x)}+{max(0, y)}")
-            except Exception:
-                pass
 
             f_c = ctk.CTkFrame(win_h, fg_color="#101524", corner_radius=16, border_width=1, border_color="#222b42")
             f_c.pack(fill="both", expand=True, padx=14, pady=14)
@@ -2035,12 +2033,12 @@ def iniciar_aplicacion_gui() -> None:
             ]
             for tit, desc, col in items:
                 r = ctk.CTkFrame(f_c, fg_color="transparent")
-                r.pack(fill="x", padx=16, pady=3)
-                ctk.CTkLabel(r, text=tit, font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=col, width=180, anchor="w").pack(side="left")
-                ctk.CTkLabel(r, text=desc, font=ctk.CTkFont(family="Segoe UI", size=10), text_color="#cbd5e1", anchor="w", justify="left").pack(side="left", fill="x", expand=True)
+                r.pack(fill="x", padx=16, pady=4)
+                ctk.CTkLabel(r, text=tit, font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=col, width=175, anchor="w").pack(side="left", anchor="n")
+                ctk.CTkLabel(r, text=desc, font=ctk.CTkFont(family="Segoe UI", size=11), text_color="#cbd5e1", anchor="w", justify="left", wraplength=420).pack(side="left", fill="x", expand=True)
 
             f_info = ctk.CTkFrame(f_c, fg_color="#151b2e", corner_radius=10, border_width=1, border_color="#2a3350")
-            f_info.pack(fill="x", padx=16, pady=(10, 10))
+            f_info.pack(fill="x", padx=16, pady=(12, 12))
 
             ctk.CTkLabel(
                 f_info,
@@ -2049,6 +2047,7 @@ def iniciar_aplicacion_gui() -> None:
                 text_color="#94a3b8",
                 justify="left",
                 anchor="w",
+                wraplength=560,
             ).pack(fill="x", padx=10, pady=8)
 
             ctk.CTkButton(
@@ -2062,6 +2061,17 @@ def iniciar_aplicacion_gui() -> None:
                 hover_color=PURPLE_HOVER,
                 font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             ).pack(pady=(0, 6))
+
+            win_h.update_idletasks()
+            w_req = max(630, win_h.winfo_reqwidth())
+            h_req = win_h.winfo_reqheight() + 10
+            try:
+                x = win.winfo_x() + (win.winfo_width() // 2) - (w_req // 2)
+                y = win.winfo_y() + (win.winfo_height() // 2) - (h_req // 2)
+                win_h.geometry(f"{w_req}x{h_req}+{max(0, x)}+{max(0, y)}")
+            except Exception:
+                win_h.geometry(f"{w_req}x{h_req}")
+            win_h.deiconify()
 
         btn_ayuda = ctk.CTkButton(
             row_probe_top,
@@ -2170,20 +2180,13 @@ def iniciar_aplicacion_gui() -> None:
 
         def _mostrar_ayuda_api():
             win_h = ctk.CTkToplevel(win)
+            win_h.withdraw()
             win_h.title("Guía de Claves API")
-            win_h.geometry("490x240")
             win_h.resizable(False, False)
+            win_h.configure(fg_color=BG_DARK)
             aplicar_icono_ventana(win_h)
             win_h.transient(win)
             win_h.grab_set()
-
-            try:
-                win_h.update_idletasks()
-                x = win.winfo_x() + (win.winfo_width() // 2) - 245
-                y = win.winfo_y() + (win.winfo_height() // 2) - 120
-                win_h.geometry(f"+{max(0, x)}+{max(0, y)}")
-            except Exception:
-                pass
 
             f_c = ctk.CTkFrame(win_h, fg_color="#101524", corner_radius=16, border_width=1, border_color="#222b42")
             f_c.pack(fill="both", expand=True, padx=14, pady=14)
@@ -2202,6 +2205,7 @@ def iniciar_aplicacion_gui() -> None:
                 text_color="#cbd5e1",
                 justify="left",
                 anchor="w",
+                wraplength=480,
             ).pack(fill="x", padx=16, pady=(0, 14))
 
             ctk.CTkButton(
@@ -2215,6 +2219,17 @@ def iniciar_aplicacion_gui() -> None:
                 hover_color=PURPLE_HOVER,
                 font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             ).pack(pady=(0, 6))
+
+            win_h.update_idletasks()
+            w_req = max(520, win_h.winfo_reqwidth())
+            h_req = win_h.winfo_reqheight() + 10
+            try:
+                x = win.winfo_x() + (win.winfo_width() // 2) - (w_req // 2)
+                y = win.winfo_y() + (win.winfo_height() // 2) - (h_req // 2)
+                win_h.geometry(f"{w_req}x{h_req}+{max(0, x)}+{max(0, y)}")
+            except Exception:
+                win_h.geometry(f"{w_req}x{h_req}")
+            win_h.deiconify()
 
         btn_ayuda_api = ctk.CTkButton(
             top_api,
@@ -2427,7 +2442,7 @@ def iniciar_aplicacion_gui() -> None:
 
         ctk.CTkButton(
             row_pildoras_carpetas,
-            text="Abrir Carpeta Assets",
+            text="Carpeta Assets",
             command=abrir_carpeta_assets,
             corner_radius=14,
             height=38,
@@ -2441,7 +2456,7 @@ def iniciar_aplicacion_gui() -> None:
 
         ctk.CTkButton(
             row_pildoras_carpetas,
-            text="Abrir Carpeta Output",
+            text="Carpeta Output",
             command=abrir_carpeta_salida,
             corner_radius=14,
             height=38,
@@ -2606,6 +2621,13 @@ def iniciar_aplicacion_gui() -> None:
 
         aplicar_icono_ventana(win)
         win.update_idletasks()
+        req_h = win.winfo_reqheight() + 8
+        try:
+            rx = root.winfo_x() + (root.winfo_width() // 2) - 300
+            ry = root.winfo_y() + (root.winfo_height() // 2) - (req_h // 2)
+            win.geometry(f"600x{req_h}+{max(0, rx)}+{max(0, ry)}")
+        except Exception:
+            win.geometry(f"600x{req_h}")
         win.deiconify()
         win.lift()
         win.focus_force()
@@ -3187,12 +3209,7 @@ def iniciar_aplicacion_gui() -> None:
                 root.after(0, _actualizar_pildora_cola)
                 root.after(0, _actualizar_pildora_rendimiento)
                 root.after(0, refrescar_selector_cuentas_ui)
-                if _ventana_programados_ref and _ventana_programados_ref.winfo_exists():
-                    if hasattr(_ventana_programados_ref, "_render_silencioso"):
-                        root.after(0, _ventana_programados_ref._render_silencioso)
-                if _ventana_overview_ref and _ventana_overview_ref.winfo_exists():
-                    if hasattr(_ventana_overview_ref, "_render_silencioso"):
-                        root.after(0, _ventana_overview_ref._render_silencioso)
+                # No refrescar ventanas secundarias automáticamente para evitar parpadeos
             except Exception:
                 pass
 
@@ -3243,12 +3260,26 @@ def iniciar_aplicacion_gui() -> None:
                 text_color=TEXT_MAIN,
             ).pack(side="left")
 
+            btn_refrescar_cola = ctk.CTkButton(
+                sec_prog_header,
+                text="Refrescar",
+                command=_refrescar_manual_cola,
+                width=85,
+                height=26,
+                corner_radius=8,
+                fg_color="#1e2436",
+                hover_color="#2b354f",
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                text_color="#ffffff",
+            )
+            btn_refrescar_cola.pack(side="right", padx=(8, 0))
+
             ctk.CTkLabel(
                 sec_prog_header,
                 text=f"{len(items_a_mostrar)} en cola",
                 font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-                text_color=CYAN_ACCENT,
-                fg_color="#0e2a3a",
+                text_color="#ffffff",
+                fg_color="#101524",
                 corner_radius=8,
                 padx=8,
                 pady=2,
@@ -3320,8 +3351,8 @@ def iniciar_aplicacion_gui() -> None:
                             row_line2,
                             text=nom_cuenta[:20],
                             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                            text_color="#c084fc",
-                            fg_color="#221834",
+                            text_color="#ffffff",
+                            fg_color="#101524",
                             corner_radius=8,
                             padx=10,
                             pady=2,
@@ -3331,8 +3362,8 @@ def iniciar_aplicacion_gui() -> None:
                         row_line2,
                         text="Programado",
                         font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                        text_color=CYAN_ACCENT,
-                        fg_color="#0e2a3a",
+                        text_color="#ffffff",
+                        fg_color="#101524",
                         corner_radius=8,
                         padx=10,
                         pady=2,
@@ -3347,13 +3378,38 @@ def iniciar_aplicacion_gui() -> None:
                             width=120,
                             height=26,
                             corner_radius=10,
-                            fg_color="#1e2436",
-                            hover_color="#2b354f",
-                            text_color=CYAN_ACCENT,
+                            fg_color="#cc0000",
+                            hover_color="#990000",
+                            text_color="#ffffff",
                             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
                         ).pack(side="right", padx=(8, 0))
 
-        win_p._render_silencioso = _render_vista
+        def _refrescar_manual_cola() -> None:
+            def _worker_fetch() -> None:
+                nonlocal _TS_ACTUALIZACION_COLA
+                try:
+                    from subir_a_youtube import obtener_shorts_programados
+                    items_prog = obtener_shorts_programados()
+                    _CACHE_SHORTS_PROGRAMADOS.clear()
+                    _CACHE_SHORTS_PROGRAMADOS.extend(items_prog)
+                    _TS_ACTUALIZACION_COLA = time.time()
+                except Exception as e_f:
+                    print(f"[!] Error refrescando programados: {e_f}")
+
+                def _ui_update() -> None:
+                    try:
+                        if win_p.winfo_exists():
+                            _render_vista()
+                        _actualizar_pildora_cola()
+                    except Exception:
+                        pass
+
+                try:
+                    root.after(0, _ui_update)
+                except Exception:
+                    pass
+
+            threading.Thread(target=_worker_fetch, daemon=True).start()
 
         def _cerrar_win_p() -> None:
             nonlocal _ventana_programados_ref
@@ -3451,6 +3507,20 @@ def iniciar_aplicacion_gui() -> None:
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
         )
         seg_orden.pack(side="left")
+
+        btn_refrescar_overview = ctk.CTkButton(
+            sort_bar,
+            text="Refrescar",
+            command=lambda: _refrescar_manual_overview(),
+            width=90,
+            height=30,
+            corner_radius=12,
+            fg_color="#1e2436",
+            hover_color="#2b354f",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color="#ffffff",
+        )
+        btn_refrescar_overview.pack(side="right")
 
         scroll_f = ctk.CTkScrollableFrame(
             win_o,
@@ -3558,8 +3628,8 @@ def iniciar_aplicacion_gui() -> None:
                         row_line2,
                         text=f"{v_num:,} vistas",
                         font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                        text_color="#38bdf8",
-                        fg_color="#0e2338",
+                        text_color="#ffffff",
+                        fg_color="#101524",
                         corner_radius=8,
                         padx=10,
                         pady=2,
@@ -3570,8 +3640,8 @@ def iniciar_aplicacion_gui() -> None:
                         row_line2,
                         text=f"{l_num:,} likes",
                         font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                        text_color="#4ade80",
-                        fg_color="#0f291e",
+                        text_color="#ffffff",
+                        fg_color="#101524",
                         corner_radius=8,
                         padx=10,
                         pady=2,
@@ -3582,8 +3652,8 @@ def iniciar_aplicacion_gui() -> None:
                         row_line2,
                         text=f"{c_num:,} comentarios",
                         font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                        text_color="#e879f9",
-                        fg_color="#2b1535",
+                        text_color="#ffffff",
+                        fg_color="#101524",
                         corner_radius=8,
                         padx=10,
                         pady=2,
@@ -3598,13 +3668,38 @@ def iniciar_aplicacion_gui() -> None:
                             width=120,
                             height=26,
                             corner_radius=10,
-                            fg_color="#1e2436",
-                            hover_color="#2b354f",
-                            text_color=CYAN_ACCENT,
+                            fg_color="#cc0000",
+                            hover_color="#990000",
+                            text_color="#ffffff",
                             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
                         ).pack(side="right", padx=(8, 0))
 
-        win_o._render_silencioso = _render_vista
+        def _refrescar_manual_overview() -> None:
+            def _worker_fetch() -> None:
+                nonlocal _TS_ACTUALIZACION_METRICAS
+                try:
+                    from subir_a_youtube import obtener_metricas_ultimos_videos
+                    items_pubs = obtener_metricas_ultimos_videos(total_max=30)
+                    _CACHE_VIDEOS_PUBLICADOS.clear()
+                    _CACHE_VIDEOS_PUBLICADOS.extend(items_pubs)
+                    _TS_ACTUALIZACION_METRICAS = time.time()
+                except Exception as e_f:
+                    print(f"[!] Error refrescando métricas: {e_f}")
+
+                def _ui_update() -> None:
+                    try:
+                        if win_o.winfo_exists():
+                            _render_vista()
+                        _actualizar_pildora_rendimiento()
+                    except Exception:
+                        pass
+
+                try:
+                    root.after(0, _ui_update)
+                except Exception:
+                    pass
+
+            threading.Thread(target=_worker_fetch, daemon=True).start()
 
         def _cerrar_win_o() -> None:
             nonlocal _ventana_overview_ref
@@ -3703,12 +3798,7 @@ def iniciar_aplicacion_gui() -> None:
                             refrescar_selector_cuentas_ui()
                             _actualizar_pildora_cola()
                             _actualizar_pildora_rendimiento()
-                            if _ventana_programados_ref and _ventana_programados_ref.winfo_exists() and prog_cambio:
-                                if hasattr(_ventana_programados_ref, "_render_silencioso"):
-                                    _ventana_programados_ref._render_silencioso()
-                            if _ventana_overview_ref and _ventana_overview_ref.winfo_exists() and pubs_cambio:
-                                if hasattr(_ventana_overview_ref, "_render_silencioso"):
-                                    _ventana_overview_ref._render_silencioso()
+                            # Ventanas secundarias se mantienen estables sin refrescos automáticos
                         except Exception:
                             pass
 
