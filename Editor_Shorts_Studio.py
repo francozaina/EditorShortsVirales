@@ -5534,6 +5534,8 @@ def iniciar_aplicacion_gui() -> None:
         _actualizar_progreso_ui(1.0, "Buscando y seleccionando videos...", "#facc15", PURPLE_MAIN)
 
         def tarea_auto_total() -> None:
+            nonlocal voz_elegida
+            voz_elegida = VOCES_DISPONIBLES.get(voz_var.get(), EDGE_VOICE_DEFAULT)
             stdout_orig = sys.stdout
             stderr_orig = sys.stderr
             sys.stdout = RedireccionadorSilencioso(cola_logs)

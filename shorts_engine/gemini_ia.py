@@ -519,7 +519,7 @@ class GeminiPoolOrchestrator:
                     return vivas_ahora
 
         async def _run_probes():
-            tasks = [self._probe_single_key(idx, target_model, timeout_sec=2.5) for idx in range(len(self.api_keys))]
+            tasks = [self._probe_single_key(idx, target_model, timeout_sec=4.0) for idx in range(len(self.api_keys))]
             return await asyncio.gather(*tasks)
 
         try:
@@ -535,7 +535,12 @@ class GeminiPoolOrchestrator:
         vivas = [idx for idx, ok, _, _ in sorted(results, key=lambda x: x[2]) if ok]
         if vivas:
             self.last_probe_cache[target_model] = (time.time(), vivas)
-        return vivas
+            return vivas
+
+        # Fallback de resiliencia: si el micro-ping falló o tuvo timeout por congestión de red,
+        # no descartar el modelo completo; intentar con las cuentas que no estén en cooldown activo
+        disponibles = [idx for idx in range(len(self.api_keys)) if self._is_available(idx, target_model)]
+        return disponibles
 
     def auditar_modelos_en_vivo(self) -> List[Dict[str, Any]]:
         """
