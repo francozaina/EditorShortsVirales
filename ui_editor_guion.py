@@ -634,8 +634,12 @@ def abrir_dialogo_posicion_pantalla(
     def _actualizar_panel_seleccion():
         if selected_sprite is not None:
             nom_dsp = selected_sprite.nombre.title()
+            if selected_sprite.tipo == "flecha" or abs(selected_sprite.rot) > 1.0:
+                texto_sel = f"🎯 {nom_dsp} | Giro: {selected_sprite.rot:.0f}°"
+            else:
+                texto_sel = f"🎯 {nom_dsp}"
             lbl_sel_info.configure(
-                text=f"🎯 {nom_dsp} ({selected_sprite.x:.0f}%, {selected_sprite.y:.0f}%) | {selected_sprite.rot:.0f}°",
+                text=texto_sel,
                 text_color="#38bdf8"
             )
             var_tracking.set(selected_sprite.tracking)
@@ -643,7 +647,7 @@ def abrir_dialogo_posicion_pantalla(
             btn_quitar.configure(state="normal")
         else:
             lbl_sel_info.configure(
-                text="Toca un sprite para mover, estirar o girar",
+                text="Toca un elemento para mover o girar",
                 text_color="#64748b"
             )
             chk_tracking.configure(state="disabled")
