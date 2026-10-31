@@ -15,10 +15,12 @@ Leer esto ANTES de tocar codigo. Objetivo: aplicar cambios en pocos pasos y sin 
 2. **Editar**: con la herramienta de edicion directa. Si falla por espacios/CRLF, usar
    `python tools/reemplazar.py cambios.py` (ver docstring; aborta sin escribir si algo no coincide).
 3. **Verificar**: `python tools/verificar.py` (compila todo + arranca la GUI oculta, ~4s). Debe imprimir 2 `[OK]`.
-4. **Guardar en ramas de prueba (Feature Branches)**:
-   - Crear rama de prueba: `git checkout -b feat/nombre-feature` (o `fix/nombre-bug`).
-   - Commitear y pushear la rama: `git add -A; git commit -m "..."; git push -u origin <nombre-rama>` (PowerShell: separar con `;`, NUNCA `&&`).
-   - Cuando esté probado y aprobado: merge a `main` (`git checkout main; git merge <nombre-rama>; git push origin main`).
+4. **Guardar en ramas de prueba y version local**:
+   - **Cambios de UI**: commitear y pushear a la rama `cambios-ui`.
+   - **Cambios de sistemas / backend crítico**: commitear y pushear a ramas específicas (`feat/nombre-feature` o `fix/nombre-bug`).
+   - **Versión local del usuario**: el repositorio local SIEMPRE debe quedar en la rama de trabajo con los cambios aplicados, para que el usuario pueda usar y probar la app de inmediato sin tener que descargar ni hacer pull manual.
+   - **Commits y push en PowerShell**: separar comandos con `;`, NUNCA con `&&`.
+   - **Llegada a `main`**: solo cuando los cambios estén probados y aprobados por el usuario se hace merge a `main` (`git checkout main; git merge cambios-ui; git push origin main; git checkout cambios-ui`).
    - Esto evita romper `main` y asegura que el actualizador automático de la app solo avise cuando `main` reciba versiones estables.
 
 ## 2. Arquitectura
