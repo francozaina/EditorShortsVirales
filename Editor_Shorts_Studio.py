@@ -1896,11 +1896,11 @@ def iniciar_aplicacion_gui() -> None:
         card_api.pack(fill="x", padx=24, pady=(0, 10))
 
         # Fila de Cuota Diaria de YouTube dentro de card_api
-        row_cuota_ajustes = ctk.CTkFrame(card_api, fg_color="#101524", corner_radius=12, border_width=1, border_color="#222b42")
+        row_cuota_ajustes = ctk.CTkFrame(card_api, fg_color="#101524", corner_radius=14, border_width=1, border_color="#222b42")
         row_cuota_ajustes.pack(fill="x", padx=18, pady=(14, 10))
 
         top_cuota_aj = ctk.CTkFrame(row_cuota_ajustes, fg_color="transparent")
-        top_cuota_aj.pack(fill="x", padx=12, pady=(8, 8))
+        top_cuota_aj.pack(fill="x", padx=14, pady=(8, 8))
 
         lbl_cuota_ajustes_txt = ctk.CTkLabel(
             top_cuota_aj,
@@ -2154,13 +2154,17 @@ def iniciar_aplicacion_gui() -> None:
         from shorts_engine.gemini_ia import obtener_modelos_plantilla
         _render_resultado_modelos(obtener_modelos_plantilla())
 
-        top_api = ctk.CTkFrame(card_api, fg_color="transparent")
-        top_api.pack(fill="x", padx=18, pady=(10, 8))
+        # Contenedor de Claves API dentro de card_api (encuadre propio)
+        frame_claves = ctk.CTkFrame(card_api, fg_color="#101524", corner_radius=14, border_width=1, border_color="#222b42")
+        frame_claves.pack(fill="x", padx=18, pady=(0, 14))
+
+        top_api = ctk.CTkFrame(frame_claves, fg_color="transparent")
+        top_api.pack(fill="x", padx=14, pady=(10, 8))
 
         ctk.CTkLabel(
             top_api,
             text="Claves API",
-            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             text_color=TEXT_MAIN,
         ).pack(side="left")
 
@@ -2243,22 +2247,22 @@ def iniciar_aplicacion_gui() -> None:
 
         keys_existentes = obtener_gemini_api_keys()
 
-        row_k_bottom = ctk.CTkFrame(card_api, fg_color="transparent")
-        row_k_bottom.pack(fill="x", padx=18, pady=(0, 14))
+        row_k_bottom = ctk.CTkFrame(frame_claves, fg_color="transparent")
+        row_k_bottom.pack(fill="x", padx=14, pady=(0, 10))
 
         n_ini = len(keys_existentes)
         lbl_status_k = ctk.CTkLabel(
             row_k_bottom,
-            text=f"✔ Pool activo: {n_ini} cuenta{'s' if n_ini != 1 else ''} vinculada{'s' if n_ini != 1 else ''}" if n_ini else "⚠ Sin claves cargadas",
+            text=f"Pool activo: {n_ini} cuenta{'s' if n_ini != 1 else ''} vinculada{'s' if n_ini != 1 else ''}" if n_ini else "Sin claves cargadas",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            text_color=GREEN_ACCENT if n_ini else "#f59e0b",
+            text_color="#ffffff",
         )
         lbl_status_k.pack(side="left")
 
         def _actualizar_status_pool(n_k: int) -> None:
             lbl_status_k.configure(
-                text=f"✔ Pool activo: {n_k} cuenta{'s' if n_k != 1 else ''} vinculada{'s' if n_k != 1 else ''}" if n_k else "⚠ Sin claves cargadas",
-                text_color=GREEN_ACCENT if n_k else "#f59e0b",
+                text=f"Pool activo: {n_k} cuenta{'s' if n_k != 1 else ''} vinculada{'s' if n_k != 1 else ''}" if n_k else "Sin claves cargadas",
+                text_color="#ffffff" if n_k else "#f59e0b",
             )
 
         def _abrir_dialogo_editar_claves() -> None:
@@ -2417,7 +2421,6 @@ def iniciar_aplicacion_gui() -> None:
             text_color="#052e16",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
         ).pack(side="right")
-
         # 4. Carpetas Output y Assets (estilo píldoras inferiores lado a lado)
         row_pildoras_carpetas = ctk.CTkFrame(win, fg_color="transparent")
         row_pildoras_carpetas.pack(fill="x", padx=24, pady=(0, 14))
