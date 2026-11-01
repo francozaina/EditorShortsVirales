@@ -330,6 +330,7 @@ def iniciar_aplicacion_gui() -> None:
             "canal_fijo_seleccionado": "",
             "custom_reels": [],
             "modo_render": "Automático (GPU)",
+            "perfiles_personalidad_canales": {},
         }
         if SCHEDULE_MEM_FILE.exists():
             try:
@@ -376,6 +377,7 @@ def iniciar_aplicacion_gui() -> None:
                     "canal_fijo_seleccionado": str(leido.get("canal_fijo_seleccionado", "")),
                     "custom_reels": list(leido.get("custom_reels", [])),
                     "modo_render": str(leido.get("modo_render", "Automático (GPU)")),
+                    "perfiles_personalidad_canales": dict(leido.get("perfiles_personalidad_canales") or {}),
                 }
             except Exception:
                 pass
@@ -439,6 +441,10 @@ def iniciar_aplicacion_gui() -> None:
         "estrategia": str(mem.get("estrategia_multicuenta") or "cross_posting"),  # "cross_posting" | "rotacion"
     }
     cache_avatares_ctk: Dict[str, ctk.CTkImage] = {}
+    lbl_yt_restantes = None
+    lbl_yt_reset_hint = None
+    lbl_resumen_personalidad = None
+    perfiles_personalidad_canales: Dict[str, Dict[str, Any]] = dict(mem.get("perfiles_personalidad_canales") or {})
     row_botones_accion: Optional[ctk.CTkFrame] = None
     btn_auto_1clic: Optional[ctk.CTkButton] = None
     btn_guardar_carpeta: Optional[ctk.CTkButton] = None
@@ -544,6 +550,7 @@ def iniciar_aplicacion_gui() -> None:
                         "canal_fijo_seleccionado": canal_fijo_var.get(),
                         "custom_reels": datos_custom_reels[:12],
                         "modo_render": modo_render_var.get(),
+                        "perfiles_personalidad_canales": perfiles_personalidad_canales,
                     },
                     indent=2,
                 ),
@@ -577,16 +584,34 @@ def iniciar_aplicacion_gui() -> None:
     ).pack(anchor="w")
 
     # Contenedor superior derecho ordenado:
-    # [quota_pill] -> [btn_cuenta_top] -> [btn_ajustes] (en la esquina superior derecha)
+    # [pers_pill] -> [btn_cuenta_top] -> [btn_ajustes] (en la esquina superior derecha)
     header_right = ctk.CTkFrame(header, fg_color="transparent")
     header_right.pack(side="right")
 
-    # Tarjeta Píldora Compacta de Shorts Restantes Hoy + Botón '+' para agregar API JSON (+6 Shorts/día)
-    quota_pill = ctk.CTkFrame(header_right, fg_color=CARD_BG, corner_radius=16, border_width=1, border_color=CARD_BORDER)
-    quota_pill.pack(side="left", padx=(0, 8), pady=4)
+    # Tarjeta Píldora de Personalidad del Video (Sin Emojis en pestaña principal)
+    pers_pill = ctk.CTkFrame(header_right, fg_color=CARD_BG, corner_radius=16, border_width=1, border_color=CARD_BORDER)
+    pers_pill.pack(side="left", padx=(0, 8), pady=4)
 
-    quota_top = ctk.CTkFrame(quota_pill, fg_color="transparent")
-    quota_top.pack(fill="both", expand=True, padx=(12, 6), pady=4)
+    lbl_resumen_personalidad = ctk.CTkLabel(
+        pers_pill,
+        text="Voz + Estilo Único",
+        font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+        text_color="#a78bfa",
+    )
+    lbl_resumen_personalidad.pack(side="left", padx=(12, 8), pady=4)
+
+    btn_personalidad_canal = ctk.CTkButton(
+        pers_pill,
+        text="Personalidad Video",
+        command=lambda: abrir_modal_personalidad_canal(),
+        height=28,
+        corner_radius=12,
+        fg_color=PURPLE_MAIN,
+        hover_color=PURPLE_HOVER,
+        font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+        text_color=TEXT_MAIN,
+    )
+    btn_personalidad_canal.pack(side="left", padx=(0, 6), pady=4)
 
     def agregar_api_json_gui(parent_win: Optional[tk.Misc] = None) -> None:
         from tkinter import filedialog
@@ -694,25 +719,28 @@ def iniciar_aplicacion_gui() -> None:
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
         ).pack(side="right")
 
-    lbl_cuota_info = ctk.CTkLabel(
-        quota_top,
-        text="6/6 Shorts disponibles",
-        font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-        text_color="#ffffff",
-    )
-    lbl_cuota_info.pack(side="left", padx=(6, 8), pady=2)
-
     def refrescar_barra_cuota() -> None:
         max_tot, n_apis = obtener_max_shorts_pool_dia()
         usados_h, disp_h, _pct = obtener_estado_cuota_diaria()
-        lbl_cuota_info.configure(
-            text=f"{disp_h}/{max_tot} Shorts disponibles",
-            text_color="#ffffff",
-        )
+        if lbl_yt_restantes is not None:
+            try:
+                if lbl_yt_restantes.winfo_exists():
+                    lbl_yt_restantes.configure(
+                        text=f"{disp_h} / {max_tot} Shorts disponibles hoy ({n_apis} API{'s' if n_apis > 1 else ''} activa{'s' if n_apis > 1 else ''})",
+                        text_color=GREEN_ACCENT if disp_h > 0 else "#ef4444",
+                    )
+            except Exception:
+                pass
+        if lbl_yt_reset_hint is not None:
+            try:
+                if lbl_yt_reset_hint.winfo_exists():
+                    lbl_yt_reset_hint.configure(
+                        text="Reinicio diario: medianoche PST (04:00 - 05:00 ART) según servidores de Google"
+                    )
+            except Exception:
+                pass
 
     def sincronizar_cuota_async() -> None:
-        lbl_cuota_info.configure(text="Sincronizando...", text_color=CYAN_ACCENT)
-
         def _worker_sync() -> None:
             sincronizar_cuota_real_youtube()
             try:
@@ -1408,6 +1436,183 @@ def iniciar_aplicacion_gui() -> None:
                 lista_canales.extend(canales_por_cuenta[nuevo_cid])
             estado_rotacion["idx"] = 0
 
+    DEFAULT_PERSONALIDAD: Dict[str, Any] = {
+        "voz": list(VOCES_DISPONIBLES.keys())[0],
+        "paleta": "Amarillo Eléctrico",
+        "posicion_y": "Abajo (70%)",
+        "color_grading": "Vibrante Estándar",
+        "musica_pref": "Aleatoria (Random)",
+        "limpiar_metadatos": True,
+    }
+
+    def obtener_personalidad_canal_activo() -> Dict[str, Any]:
+        cid_act = str(estado_seleccion_cuentas.get("cuenta_id") or "principal")
+        p = perfiles_personalidad_canales.get(cid_act)
+        if not p or not isinstance(p, dict):
+            p = perfiles_personalidad_canales.get("default", {})
+        res = dict(DEFAULT_PERSONALIDAD)
+        if isinstance(p, dict):
+            res.update(p)
+        return res
+
+    def actualizar_badge_personalidad_ui() -> None:
+        if lbl_resumen_personalidad is None:
+            return
+        pers = obtener_personalidad_canal_activo()
+        v_raw = str(pers.get("voz", "Giuseppe"))
+        v_corta = v_raw.split("(")[0].strip()
+        pal_corta = str(pers.get("paleta", "Amarillo")).split()[0].strip()
+        # REGLA ESTRICTA: Sin emojis en la pestaña principal
+        try:
+            if lbl_resumen_personalidad.winfo_exists():
+                lbl_resumen_personalidad.configure(text=f"Voz: {v_corta} • Paleta: {pal_corta}")
+        except Exception:
+            pass
+
+    def abrir_modal_personalidad_canal(parent_win: Optional[tk.Misc] = None) -> None:
+        cid_act = str(estado_seleccion_cuentas.get("cuenta_id") or "principal")
+        try:
+            from subir_a_youtube import listar_cuentas_vinculadas
+            cuentas = listar_cuentas_vinculadas()
+            nom_canal_act = next((c.get("nombre") for c in cuentas if str(c.get("id")) == cid_act), "Canal Activo")
+        except Exception:
+            nom_canal_act = "Canal Activo"
+
+        pers_actual = obtener_personalidad_canal_activo()
+
+        win_p = ctk.CTkToplevel(parent_win or root)
+        win_p.title("Personalidad Visual y Estilo por Canal")
+        win_p.geometry("540x630")
+        win_p.resizable(False, False)
+        win_p.configure(fg_color=BG_DARK)
+        win_p.transient(parent_win or root)
+        aplicar_icono_ventana(win_p)
+        win_p.grab_set()
+
+        card_p = ctk.CTkFrame(win_p, fg_color=CARD_BG, corner_radius=18, border_width=1, border_color=CARD_BORDER)
+        card_p.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(
+            card_p,
+            text=f"Personalidad de: {nom_canal_act}",
+            font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
+            text_color=TEXT_MAIN,
+        ).pack(anchor="w", padx=20, pady=(16, 2))
+
+        ctk.CTkLabel(
+            card_p,
+            text="Define el estilo visual, voz y música único para este canal. Cada cuenta vinculada guarda sus propias preferencias.",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=TEXT_MUTED,
+            justify="left",
+            wraplength=480,
+        ).pack(anchor="w", padx=20, pady=(0, 14))
+
+        f_form = ctk.CTkFrame(card_p, fg_color="transparent")
+        f_form.pack(fill="x", padx=20, pady=0)
+
+        # 1. Voz del Narrador
+        ctk.CTkLabel(f_form, text="🗣️ Voz del Narrador:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_MAIN).pack(anchor="w", pady=(4, 2))
+        voces_lista = list(VOCES_DISPONIBLES.keys())
+        opt_voz_var = ctk.StringVar(value=pers_actual.get("voz", voces_lista[0]))
+        if opt_voz_var.get() not in voces_lista:
+            opt_voz_var.set(voces_lista[0])
+        ctk.CTkOptionMenu(f_form, values=voces_lista, variable=opt_voz_var, height=28, fg_color=INPUT_BG, button_color="#25304a", font=ctk.CTkFont(size=11, weight="bold")).pack(fill="x", pady=(0, 10))
+
+        # 2. Paleta de Subtítulos
+        ctk.CTkLabel(f_form, text="🎨 Paleta de Subtítulos:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_MAIN).pack(anchor="w", pady=(2, 2))
+        paletas_lista = ["Amarillo Eléctrico", "Verde Dinero", "Rojo Fuego", "Morado Cyber", "Naranja Neón", "MrBeast Original"]
+        opt_paleta_var = ctk.StringVar(value=pers_actual.get("paleta", paletas_lista[0]))
+        if opt_paleta_var.get() not in paletas_lista:
+            opt_paleta_var.set(paletas_lista[0])
+        ctk.CTkOptionMenu(f_form, values=paletas_lista, variable=opt_paleta_var, height=28, fg_color=INPUT_BG, button_color="#25304a", font=ctk.CTkFont(size=11, weight="bold")).pack(fill="x", pady=(0, 10))
+
+        # 3. Posición Vertical de Subtítulos
+        ctk.CTkLabel(f_form, text="📐 Altura / Posición Subtítulos:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_MAIN).pack(anchor="w", pady=(2, 2))
+        posiciones_lista = ["Abajo (70%)", "Medio-Abajo (60%)", "Centro (50%)", "Arriba (30%)"]
+        opt_pos_var = ctk.StringVar(value=pers_actual.get("posicion_y", posiciones_lista[0]))
+        if opt_pos_var.get() not in posiciones_lista:
+            opt_pos_var.set(posiciones_lista[0])
+        ctk.CTkOptionMenu(f_form, values=posiciones_lista, variable=opt_pos_var, height=28, fg_color=INPUT_BG, button_color="#25304a", font=ctk.CTkFont(size=11, weight="bold")).pack(fill="x", pady=(0, 10))
+
+        # 4. Color Grading Anti-Content ID
+        ctk.CTkLabel(f_form, text="🎬 Color Grading Anti-Content ID:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_MAIN).pack(anchor="w", pady=(2, 2))
+        grading_lista = ["Vibrante Estándar", "Cálido Intenso", "Frío Cinematográfico", "Alto Contraste Punch", "Desactivado (Original)"]
+        opt_color_var = ctk.StringVar(value=pers_actual.get("color_grading", grading_lista[0]))
+        if opt_color_var.get() not in grading_lista:
+            opt_color_var.set(grading_lista[0])
+        ctk.CTkOptionMenu(f_form, values=grading_lista, variable=opt_color_var, height=28, fg_color=INPUT_BG, button_color="#25304a", font=ctk.CTkFont(size=11, weight="bold")).pack(fill="x", pady=(0, 10))
+
+        # 5. Música de Fondo Preferida
+        ctk.CTkLabel(f_form, text="🎵 Música de Fondo Preferida:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_MAIN).pack(anchor="w", pady=(2, 2))
+        pistas_disco = []
+        try:
+            from shorts_engine.config import MUSICA_DIR
+            pistas_disco = [p.stem for p in sorted(MUSICA_DIR.glob("*")) if p.is_file() and p.suffix.lower() in (".mp3", ".wav", ".m4a", ".aac")]
+        except Exception:
+            pass
+        musicas_lista = ["Aleatoria (Random)", *pistas_disco, "Sin Música"]
+        opt_musica_var = ctk.StringVar(value=pers_actual.get("musica_pref", musicas_lista[0]))
+        if opt_musica_var.get() not in musicas_lista:
+            opt_musica_var.set(musicas_lista[0])
+        ctk.CTkOptionMenu(f_form, values=musicas_lista, variable=opt_musica_var, height=28, fg_color=INPUT_BG, button_color="#25304a", font=ctk.CTkFont(size=11, weight="bold")).pack(fill="x", pady=(0, 12))
+
+        # 6. Limpieza de Metadatos Anti-Huella
+        chk_meta_var = ctk.BooleanVar(value=bool(pers_actual.get("limpiar_metadatos", True)))
+        chk_meta = ctk.CTkCheckBox(
+            f_form,
+            text="🛡️ Limpiar Metadatos Anti-Huella en MP4 (-map_metadata -1)",
+            variable=chk_meta_var,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color="#cbd5e1",
+            fg_color=PURPLE_MAIN,
+            hover_color=PURPLE_HOVER,
+        )
+        chk_meta.pack(anchor="w", pady=(2, 16))
+
+        # Botones Guardar / Cancelar
+        btn_row = ctk.CTkFrame(card_p, fg_color="transparent")
+        btn_row.pack(fill="x", padx=20, pady=(6, 12))
+
+        def _guardar_personalidad() -> None:
+            perfiles_personalidad_canales[cid_act] = {
+                "voz": opt_voz_var.get(),
+                "paleta": opt_paleta_var.get(),
+                "posicion_y": opt_pos_var.get(),
+                "color_grading": opt_color_var.get(),
+                "musica_pref": opt_musica_var.get(),
+                "limpiar_metadatos": chk_meta_var.get(),
+            }
+            if opt_voz_var.get() in VOCES_DISPONIBLES:
+                voz_var.set(opt_voz_var.get())
+            _guardar_memoria()
+            actualizar_badge_personalidad_ui()
+            win_p.destroy()
+
+        ctk.CTkButton(
+            btn_row,
+            text="Guardar Estilo",
+            command=_guardar_personalidad,
+            height=32,
+            corner_radius=12,
+            fg_color=PURPLE_MAIN,
+            hover_color=PURPLE_HOVER,
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+        ).pack(side="right", padx=(8, 0))
+
+        ctk.CTkButton(
+            btn_row,
+            text="Cancelar",
+            command=win_p.destroy,
+            height=32,
+            corner_radius=12,
+            fg_color=INPUT_BG,
+            hover_color="#1d2334",
+            border_width=1,
+            border_color=CARD_BORDER,
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+        ).pack(side="right")
+
     def refrescar_selector_cuentas_ui() -> None:
         try:
             from subir_a_youtube import listar_cuentas_vinculadas
@@ -1474,6 +1679,7 @@ def iniciar_aplicacion_gui() -> None:
         try:
             root.after(0, _actualizar_pildora_cola)
             root.after(0, _actualizar_pildora_rendimiento)
+            actualizar_badge_personalidad_ui()
         except Exception:
             pass
 
@@ -1839,10 +2045,11 @@ def iniciar_aplicacion_gui() -> None:
     # VENTANA DE AJUSTES (CON TOGGLE DE MODO, CONTENIDO IA/MANUAL Y MODELO ARGON 4)
     # ==========================================================================
     def abrir_ventana_ajustes() -> None:
+        nonlocal lbl_yt_restantes, lbl_yt_reset_hint
         win = ctk.CTkToplevel(root)
         win.withdraw()
         win.title("Ajustes y Herramientas")
-        win.geometry("600x750")
+        win.geometry("620x820")
         win.resizable(False, False)
         win.configure(fg_color=BG_DARK)
         win.transient(root)
@@ -1900,11 +2107,11 @@ def iniciar_aplicacion_gui() -> None:
         row_cuota_ajustes.pack(fill="x", padx=18, pady=(14, 10))
 
         top_cuota_aj = ctk.CTkFrame(row_cuota_ajustes, fg_color="transparent")
-        top_cuota_aj.pack(fill="x", padx=14, pady=(8, 8))
+        top_cuota_aj.pack(fill="x", padx=14, pady=(10, 4))
 
         lbl_cuota_ajustes_txt = ctk.CTkLabel(
             top_cuota_aj,
-            text="Cuota Diaria de YouTube",
+            text="Cuota Diaria de YouTube Data API v3",
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             text_color=TEXT_MAIN,
         )
@@ -1990,6 +2197,39 @@ def iniciar_aplicacion_gui() -> None:
             text_color=CYAN_ACCENT,
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
         ).pack(side="right")
+
+        # Estado en vivo de Shorts disponibles y reset
+        quota_live_box = ctk.CTkFrame(row_cuota_ajustes, fg_color="#0b0e17", corner_radius=10)
+        quota_live_box.pack(fill="x", padx=14, pady=(4, 6))
+
+        lbl_yt_restantes = ctk.CTkLabel(
+            quota_live_box,
+            text="Calculando Shorts disponibles...",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color=GREEN_ACCENT,
+        )
+        lbl_yt_restantes.pack(anchor="w", padx=12, pady=(6, 2))
+
+        lbl_yt_reset_hint = ctk.CTkLabel(
+            quota_live_box,
+            text="Reinicio diario: medianoche PST (04:00 - 05:00 ART) según servidores de Google",
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            text_color="#94a3b8",
+        )
+        lbl_yt_reset_hint.pack(anchor="w", padx=12, pady=(0, 6))
+
+        # Explicación anti-bot
+        ctk.CTkLabel(
+            row_cuota_ajustes,
+            text="YouTube limita cada proyecto OAuth a ~6 subidas automáticas diarias para prevenir spam. "
+                 "Puedes sumar múltiples proyectos Google Cloud para rotar y multiplicar tu límite diario.",
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            text_color="#64748b",
+            justify="left",
+            wraplength=520,
+        ).pack(anchor="w", padx=14, pady=(0, 10))
+
+        refrescar_barra_cuota()
 
         # Monitor de cuotas y estado en vivo de Gemini / Argon
         frame_probe = ctk.CTkFrame(card_api, fg_color="#101524", corner_radius=14, border_width=1, border_color="#222b42")
@@ -5072,38 +5312,7 @@ def iniciar_aplicacion_gui() -> None:
         f_top_ctrls = ctk.CTkFrame(hdr_inner, fg_color="transparent")
         f_top_ctrls.pack(side="right", padx=(0, 12))
 
-        # 1. Selector interactivo de Voz del Narrador
-        f_voz = ctk.CTkFrame(f_top_ctrls, fg_color="transparent")
-        f_voz.pack(side="left", padx=(0, 12))
-
-        lbl_voz = ctk.CTkLabel(
-            f_voz,
-            text="🗣️ Voz:",
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            text_color=TEXT_MUTED,
-        )
-        lbl_voz.pack(side="left", padx=(0, 5))
-
-        def _al_cambiar_voz(nueva_voz: str):
-            voz_var.set(nueva_voz)
-            _guardar_memoria()
-            if txt_guion_box is not None:
-                txt_guion_box.metadatos_ocultos["VOZ_NARRADOR"] = nueva_voz
-
-        opt_voz = ctk.CTkOptionMenu(
-            f_voz,
-            values=list(VOCES_DISPONIBLES.keys()),
-            command=_al_cambiar_voz,
-            width=135,
-            height=26,
-            fg_color="#182032",
-            button_color="#25304a",
-            button_hover_color="#334166",
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            dropdown_font=ctk.CTkFont(family="Segoe UI", size=11),
-        )
-        opt_voz.set(voz_var.get())
-        opt_voz.pack(side="left")
+        # (Voz del narrador gestionada de forma única por canal en Personalidad del Video)
 
         # 2. Selector interactivo de Canción / Música de Fondo
         pistas_disponibles = ["Auto", "Sin Música"]
@@ -6122,6 +6331,7 @@ def iniciar_aplicacion_gui() -> None:
                                     progreso_cb=_cb_edicion,
                                     cancelar_check=lambda: evento_cancelar.is_set(),
                                     encoder_override=modo_render_elegido,
+                                    personalidad_canal=obtener_personalidad_canal_activo(),
                                 )
                             )
                     ultimo_video_generado[0] = ruta_final
@@ -6326,6 +6536,7 @@ def iniciar_aplicacion_gui() -> None:
                                                 progreso_cb=_cb_edit_otro,
                                                 cancelar_check=lambda: evento_cancelar.is_set(),
                                                 encoder_override=modo_render_elegido,
+                                                personalidad_canal=obtener_personalidad_canal_activo(),
                                             )
                                         )
                                         ultimo_video_generado[0] = ruta_final
@@ -6357,6 +6568,7 @@ def iniciar_aplicacion_gui() -> None:
                                             progreso_cb=_cb_reedit_e,
                                             cancelar_check=lambda: evento_cancelar.is_set(),
                                             encoder_override=modo_render_elegido,
+                                            personalidad_canal=obtener_personalidad_canal_activo(),
                                         )
                                     )
                                     ultimo_video_generado[0] = ruta_final

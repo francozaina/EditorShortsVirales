@@ -297,10 +297,29 @@ def _clasificar_color_palabra(
     verdes: Set[str],
     rojas: Set[str],
     cianes: Set[str],
+    paleta_nombre: str = "Amarillo / Cian (MrBeast)",
 ) -> Tuple[Tuple[int, int, int], Tuple[int, int, int]]:
     """
-    Devuelve (color_relleno_rgb, color_glow_neon_rgb) para la palabra activa.
+    Devuelve (color_relleno_rgb, color_glow_neon_rgb) para la palabra activa según la paleta del canal.
     """
+    if "Verde" in paleta_nombre:
+        if palabra_limpia in rojas or forzar_destaque:
+            return (255, 230, 0), (255, 175, 0)
+        return (0, 255, 102), (0, 240, 85)
+    elif "Rojo" in paleta_nombre or "Fuego" in paleta_nombre:
+        if palabra_limpia in verdes or forzar_destaque:
+            return (255, 214, 10), (255, 165, 0)
+        return (255, 59, 48), (255, 15, 55)
+    elif "Morado" in paleta_nombre or "Cyber" in paleta_nombre:
+        if palabra_limpia in cianes or "?" in texto_original:
+            return (0, 245, 255), (0, 185, 255)
+        return (255, 42, 133), (220, 20, 100)
+    elif "Naranja" in paleta_nombre:
+        if palabra_limpia in verdes or forzar_destaque:
+            return (255, 255, 255), (200, 200, 200)
+        return (255, 138, 0), (255, 90, 0)
+
+    # Paleta MrBeast por defecto
     if palabra_limpia in verdes:
         # Verde Vibrante / Éxito
         return (0, 255, 102), (0, 240, 85)
@@ -376,6 +395,7 @@ def renderizar_subtitulos_luminosos(
     palabras_verdes_extra: Optional[Set[str]] = None,
     palabras_rojas_extra: Optional[Set[str]] = None,
     palabras_cian_extra: Optional[Set[str]] = None,
+    estilo_subtitulos: Optional[Dict] = None,
 ) -> None:
     """
     Renderiza los subtitulos luminosos estilo MrBeast/Hormozi.
@@ -406,6 +426,18 @@ def renderizar_subtitulos_luminosos(
     rojas = PALABRAS_ROJAS_BASE | (palabras_rojas_extra or set())
     cianes = PALABRAS_CIAN_BASE | (palabras_cian_extra or set())
 
+    estilo_subtitulos = estilo_subtitulos or {}
+    paleta_nombre = str(estilo_subtitulos.get("paleta", "Amarillo / Cian (MrBeast)"))
+    pos_sub = str(estilo_subtitulos.get("posicion", "Inferior Estándar"))
+    if "Centro" in pos_sub:
+        y_offset_custom = -210
+    elif "Medio" in pos_sub:
+        y_offset_custom = -95
+    else:
+        y_offset_custom = 0
+
+    y_centro_efectivo = y_centro + y_offset_custom
+
     p_act = palabras[idx_activa]
     edad = max(0.0, t_actual - p_act.inicio_seg)
     pulso_voz = min(0.09, nivel_voz_rms * 0.45)
@@ -415,7 +447,7 @@ def renderizar_subtitulos_luminosos(
     # MODO TURBO ZERO-COPY (NumPy in-place con cache de placas)
     # -------------------------------------------------------------
     if isinstance(lienzo, np.ndarray):
-        clave_cache = (tuple(x[1].texto for x in grupo_mostrar), idx_activa)
+        clave_cache = (tuple(x[1].texto for x in grupo_mostrar), idx_activa, paleta_nombre)
         if clave_cache not in _CACHE_PLACAS_SUBTITULOS_NP:
             tam_base_activa = 86
             tam_base_inactiva = 70
@@ -429,7 +461,7 @@ def renderizar_subtitulos_luminosos(
 
                 if es_activa:
                     color_fill, color_glow = _clasificar_color_palabra(
-                        limpia, txt_up, p.forzar_destaque, verdes, rojas, cianes
+                        limpia, txt_up, p.forzar_destaque, verdes, rojas, cianes, paleta_nombre
                     )
                     sprite_base = _obtener_sprite_palabra_luminosa(
                         txt_up, tam_base_activa, color_fill, color_glow, True
@@ -493,9 +525,9 @@ def renderizar_subtitulos_luminosos(
             n_wp = int(round(wp * factor_pop))
             n_hp = int(round(hp * factor_pop))
             placa_pop = cv2.resize(placa_rgba, (n_wp, n_hp), interpolation=cv2.INTER_LINEAR)
-            estampar_rgba_en_rgb_inplace(lienzo, placa_pop, WIDTH // 2, y_centro)
+            estampar_rgba_en_rgb_inplace(lienzo, placa_pop, WIDTH // 2, y_centro_efectivo)
         else:
-            estampar_rgba_en_rgb_inplace(lienzo, placa_rgba, WIDTH // 2, y_centro)
+            estampar_rgba_en_rgb_inplace(lienzo, placa_rgba, WIDTH // 2, y_centro_efectivo)
         return
 
     # -------------------------------------------------------------
@@ -567,7 +599,7 @@ def renderizar_subtitulos_luminosos(
                 sprite_render = sprite_render.rotate(angulo_pop, resample=Image.Resampling.BICUBIC, expand=True)
 
         cx_palabra = x_cursor + ancho_f // 2
-        cy_palabra = (y_centro - 10) if es_activa else y_centro
+        cy_palabra = (y_centro_efectivo - 10) if es_activa else y_centro_efectivo
 
         dest_x = cx_palabra - sprite_render.width // 2
         dest_y = cy_palabra - sprite_render.height // 2

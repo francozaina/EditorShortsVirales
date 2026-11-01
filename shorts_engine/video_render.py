@@ -1259,8 +1259,17 @@ async def editar_video_con_guion(
     progreso_cb: Optional[object] = None,
     cancelar_check: Optional[Callable[[], bool]] = None,
     encoder_override: Optional[str] = None,
+    personalidad_canal: Optional[Dict] = None,
 ) -> Path:
     _max_prog_render = [0.0]
+    personalidad_canal = personalidad_canal or {}
+    color_grading = str(personalidad_canal.get("color_grading", "Vibrante Estándar"))
+    estilo_subtitulos = {
+        "paleta": personalidad_canal.get("paleta_subtitulos", "Amarillo / Cian (MrBeast)"),
+        "posicion": personalidad_canal.get("posicion_subtitulos", "Inferior Estándar"),
+    }
+    musica_pref = str(personalidad_canal.get("musica_preferida", "Aleatoria Automática"))
+    limpiar_metadatos = bool(personalidad_canal.get("limpiar_metadatos_mp4", True))
 
     def _notificar_prog(frac_0_1: float, detalle: str) -> None:
         if callable(progreso_cb):
@@ -1530,7 +1539,15 @@ async def editar_video_con_guion(
             elif any(w in texto_completo for w in ("inspiracional", "inspiracion", "motivacion", "superacion", "emotivo", "emocionante", "lagrimas de emocion", "salvar", "rescate")):
                 tono_efectivo = "inspiracional"
 
-        pista_musica = seleccionar_musica_fondo(tono_efectivo)
+        if musica_pref and musica_pref != "Aleatoria Automática":
+            from .config import MUSICA_DIR
+            p_cand = MUSICA_DIR / musica_pref
+            if p_cand.exists():
+                pista_musica = p_cand
+            else:
+                pista_musica = seleccionar_musica_fondo(tono_efectivo)
+        else:
+            pista_musica = seleccionar_musica_fondo(tono_efectivo)
 
     if pista_musica and pista_musica.exists():
         # Volumen óptimo: presente en todo momento pero con ducking sutil cuando la voz habla
@@ -1619,6 +1636,7 @@ async def editar_video_con_guion(
 
         cmd_ffmpeg = [
             "ffmpeg", "-y",
+            *(["-map_metadata", "-1"] if limpiar_metadatos else []),
             "-f", "rawvideo",
             "-vcodec", "rawvideo",
             "-s", f"{WIDTH}x{HEIGHT}",
@@ -1815,6 +1833,7 @@ async def editar_video_con_guion(
                         palabras_verdes_extra=config.palabras_verdes_extra,
                         palabras_rojas_extra=config.palabras_rojas_extra,
                         palabras_cian_extra=config.palabras_cian_extra,
+                        estilo_subtitulos=estilo_subtitulos,
                     )
 
                     if proceso_ffmpeg.poll() is not None:
@@ -1853,7 +1872,7 @@ async def editar_video_con_guion(
                     if proceso_ffmpeg.stdin:
                         try:
                             if isinstance(lienzo, np.ndarray):
-                                frame_salida = realzar_frame_viral(lienzo)
+                                frame_salida = realzar_frame_viral(lienzo, modo_color=color_grading)
                                 proceso_ffmpeg.stdin.write(memoryview(frame_salida))
                             else:
                                 proceso_ffmpeg.stdin.write(lienzo.convert("RGB").tobytes())
@@ -1910,6 +1929,7 @@ async def editar_video_con_guion(
                         nivel_voz_rms=rms_val,
                         y_centro=1340,
                         palabras_verdes_extra={"LIKE!", "LIKE"},
+                        estilo_subtitulos=estilo_subtitulos,
                     )
 
                     if proceso_ffmpeg.poll() is not None:
@@ -1934,7 +1954,7 @@ async def editar_video_con_guion(
                     if proceso_ffmpeg.stdin:
                         try:
                             if isinstance(lienzo_out, np.ndarray):
-                                frame_out_salida = realzar_frame_viral(lienzo_out)
+                                frame_out_salida = realzar_frame_viral(lienzo_out, modo_color=color_grading)
                                 proceso_ffmpeg.stdin.write(memoryview(frame_out_salida))
                             else:
                                 proceso_ffmpeg.stdin.write(lienzo_out.convert("RGB").tobytes())
