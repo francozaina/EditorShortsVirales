@@ -20,7 +20,8 @@ from .config import (
     BASE_DIR, ASSETS_DIR, EMOJIS_DIR, FONTS_DIR, FOTOS_DIR, SFX_DIR, MUSICA_DIR,
     TEMP_DIR, OUTPUT_DIR, ConfigGuion, SegmentoVideoGuion, PalabraSubtitulo,
     MODO_ENCUADRE_DEFAULT, VOLUMEN_VOZ_NARRADOR, VOLUMEN_AUDIO_VIDEO_ORIGINAL,
-    VOLUMEN_MUSICA_FONDO, SUBTITLE_OFFSET_SEC, DURACION_CALLOUTS_DEFAULT, _quitar_acentos
+    VOLUMEN_MUSICA_FONDO, SUBTITLE_OFFSET_SEC, DURACION_CALLOUTS_DEFAULT, _quitar_acentos,
+    parsear_directiva_circulo
 )
 from .parser_guion import cargar_guion_video
 from .subtitulos import renderizar_subtitulos_luminosos, cargar_fuente, asegurar_fuente_mrbeast, estampar_rgba_en_rgb_inplace
@@ -1539,13 +1540,8 @@ async def editar_video_con_guion(
             elif any(w in texto_completo for w in ("inspiracional", "inspiracion", "motivacion", "superacion", "emotivo", "emocionante", "lagrimas de emocion", "salvar", "rescate")):
                 tono_efectivo = "inspiracional"
 
-        if musica_pref and musica_pref != "Aleatoria Automática":
-            from .config import MUSICA_DIR
-            p_cand = MUSICA_DIR / musica_pref
-            if p_cand.exists():
-                pista_musica = p_cand
-            else:
-                pista_musica = seleccionar_musica_fondo(tono_efectivo)
+        if musica_pref and str(musica_pref).strip().lower() not in ("aleatoria (random)", "aleatoria automática", "auto", "random"):
+            pista_musica = seleccionar_musica_fondo(str(musica_pref).strip())
         else:
             pista_musica = seleccionar_musica_fondo(tono_efectivo)
 
@@ -1739,7 +1735,6 @@ async def editar_video_con_guion(
                 # Calcular segundo relativo exacto para la aparición del círculo/flecha según t_ancla
                 t_ini_callout_circulo = 0.04
                 if seg.circulo:
-                    from .config import parsear_directiva_circulo
                     info_c = parsear_directiva_circulo(seg.circulo, t_vid_ini, t_vid_fin)
                     if info_c.activo and info_c.t_ancla is not None:
                         t_ancla_rel = max(0.0, float(info_c.t_ancla) - t_vid_ini)
