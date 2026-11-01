@@ -1,21 +1,18 @@
-TITULO_SUPERIOR: Intent borrorle el tatuaje a su hermana 
-TITULO_YOUTUBE: ¡Intentó borrorle el tatuaje a su hermana y pasó esto! 😱✨ #shorts
+TITULO_SUPERIOR: Casi se lo TRAGA la TIERRA por COMPLETO 
+TITULO_YOUTUBE: ¡Casi se lo TRAGA la TIERRA por COMPLETO! 😱 #shorts
 MODO_ENCUADRE: full
 VOLUMEN_VIDEO_ORIGINAL: 0
 ARCHIVO_SALIDA: auto
-DESCRIPCION_YOUTUBE: Trató de limpiar el dibujo de su hermana pensando que era plumón, pero descubrió un increíble secreto. ¿Alguna vez probaste tatuajes de brillantina? #shorts #viral
+DESCRIPCION_YOUTUBE: Un pequeño travieso cayó en una trampa de lodo oculta en el suelo. ¿Qué hizo su madre al sacarlo del barro? #shorts #viral
 ESTADO_PUBLICACION: privado
-SCHEDULE: 2026-10-30 20:30
+SCHEDULE: 2026-11-01 19:30
 PARA_NINOS: no
-TONO_VIDEO: fondo
+TONO_VIDEO: Fondo 1
 
 [GUION]
-TIEMPO | EFECTO | SFX | EMOJI | FLECHA | CIRCULO | TEXTO
-00:00 - 00:04 | zoom_impacto | crowd_shocked | sorprendido:derecha | centro | ninguno | ¡Creyó que su hermana se había tatuado la mano y quizo robarle el colorido diseño!
-00:04 - 00:08 | alerta_roja | riser_suction | enojo:izquierda | derecha | ninguno | Le frotó con toallitas húmedas y agua, pero el dibujo no se borraba.
-00:08 - 00:13 | temblor | punch+xp_Error | risa:derecha | derecha | ninguno | ¡Su envidia era tan grande que no paró de intenar y por poco le corta la mano para sacarselo!
-00:13 - 00:17 | brillo_epico | cash_ting | sorprendido:centro | centro | ninguno | Pero la hermana le explica que son stickers especiales hechos para durar bajo todas condiciones
-00:17 - 00:22 | zoom_in | good_idea | ojos:derecha | auto | ninguno | Le muestra muchos diseños para que ella elija el que más le gusta y asi tener tatuajes temporales las dos
-00:22 - 00:27 | ninguno | pop+ding | fiesta:derecha | ninguno | ninguno | Una vez que eligió su diseño favorito se lo preparó para aplicárselo en la mano
-00:27 - 00:32 | flash | whoosh | risa:centro | ninguno | ninguno | Un poco de presión más un paño humedo es todo lo que se necesita para  adherir el tatuaje
-00:32 - 00:38 | spotlight | party_horn+whoosh | fiesta:centro | ninguno | ninguno | El truco definitivo era usar cinta transparente para despegarlo completito en un segundo, dejando la piel limpia. ¿Te comprarías uno?
+TIEMPO | EFECTO | SFX | EMOJI | FLECHA | CIRCULO | ALTURA | TEXTO
+00:00 - 00:05 | zoom_impacto | crowd_shocked | sorprendido:78.0,32.0 | 24.4,31.7@221 | ninguno | 70% | Este niño creía que solo estaba cavando un inocente hoyo en el suelo para jugar tranquilo!
+00:05 - 00:09 | alerta_roja | riser_suction | diablo:izquierda | izquierda | ninguno | 70% | ¡Pero lo que no sospechaba era que el caminito ocultaba una trampa sumamente traicionera!
+00:09 - 00:14 | temblor | punch+xp_Error | risa:derecha | abajo | ninguno | 70% | ¡De pronto dio un paso en falso y se hundió hasta el pecho perdiendo el control!
+00:14 - 00:19 | brillo_epico | whoosh | ojos:arriba_der | derecha | ninguno | 70% | Su desesperada madre corrió de inmediato a rescatarlo con mucha prisa antes de que empeorara!
+00:19 - 00:25 | zoom_in | cartoon_laugh | risa:derecha | ninguno | ninguno | 70% | ¡Sin embargo la malvada mamá decidió hacerlo caminar directo al mismo agujero entre carcajadas para reírse de él!

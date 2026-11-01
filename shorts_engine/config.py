@@ -126,16 +126,28 @@ class SegmentoVideoGuion:
     y_subtitulos: int = 1340
 
     def __post_init__(self) -> None:
-        if self.flecha:
+        raw_f = str(self.flecha or "").strip().lower()
+        if raw_f and raw_f not in ("ninguna", "ninguno", "none", "no", "false", "-", "0", "centro", "auto"):
             self.track_flecha_activo = True
             self.tiene_flecha = True
             if not self.callout_flecha:
                 self.callout_flecha = self.flecha
-        if self.circulo:
+        else:
+            self.flecha = None
+            self.tiene_flecha = False
+            self.track_flecha_activo = False
+
+        raw_c = str(self.circulo or "").strip().lower()
+        if raw_c and raw_c not in ("ninguna", "ninguno", "none", "no", "false", "-", "0", "centro", "auto"):
             self.track_circulo_activo = True
             self.tiene_circulo = True
             if not self.callout_circulo:
                 self.callout_circulo = self.circulo
+        else:
+            self.circulo = None
+            self.tiene_circulo = False
+            self.track_circulo_activo = False
+
         if self.emoji:
             self.tiene_emoji = True
             if not self.emoji_nombre:

@@ -25,14 +25,14 @@ LINK DEL VIDEO A EDITAR: [PEGA AQUÍ EL LINK DEL VIDEO DE YOUTUBE]
 1. GANCHO DEMOLEDOR (Primer bloque: 00:00 - 00:04):
    - PROHIBIDO empezar con frases lentas o genéricas ("En este video...", "Hoy veremos...").
    - Abre INMEDIATAMENTE en medio de la acción planteando un peligro, una trampa o una pregunta visual urgente que obligue al cerebro a quedarse (ej: "¡Este hombre no sabe que ese vaso esconde la trampa más peligrosa de su vida y está por beberlo!").
-   - El primer bloque SIEMPRE debe usar `zoom_impacto` + un SFX fuerte (`crowd_shocked` o `boxing_bell`) + FLECHA apuntando al foco de tensión.
+   - El primer bloque debe usar un gancho explosivo con `zoom_impacto` o `zoom_in` + un SFX fuerte (`crowd_shocked` o `boxing_bell`). Si NO hay un objeto físico clave y concreto que señalar en pantalla, pon 'ninguna' en FLECHA. NUNCA fuerces una flecha vacía.
 
 2. ESCALADA DE CURIOSIDAD (Bloques intermedios):
    - Usa micro-ganchos ("open loops") en cada bloque. No solo describas; genera anticipación usando conectores de tensión: "¡Pero mira con atención lo que hace con la mano!", "¡Lo que no imagina es que...", "¡Cuidado porque el verdadero plan recién empieza!".
    - Cambia el estímulo visual y auditivo en cada línea para resetear la atención del espectador cada 3 a 5 segundos.
 
-3. FINAL ABRUPTO + LOOP INFINITO (Último bloque):
-   - El video NUNCA debe sonar a que "ya terminó" antes de tiempo. Narra el clímax hasta el último milisegundo.
+3. REMATE CONCLUSIVO Y REDONDO + LOOP INFINITO (Último bloque):
+   - Narra el clímax hasta el último milisegundo, pero la última oración del último bloque DEBE quedar 100% terminada sintácticamente con sentido completo, remate contundente y signo de exclamación (!) o punto final. NUNCA dejes frases cortadas ni conectores subordinados inconclusos (ejemplos prohibidos: "...porque este...", "...cuando la...", "...para que...").
    - TÉCNICA DE LOOP PERFECTO: La última frase del último bloque debe quedar conectada temática o rítmicamente con la primera frase del bloque 00:00 (por ejemplo, cerrando con un remate contundente como "¡Y todo por creerse el más listo del barrio!").
 - REGLA ESTRICTA ANTI-PUNTOS SUSPENSIVOS: PROHIBIDO TERMINAR EN "..." O DEJAR ORACIONES INCOMPLETAS. Cada bloque debe concluir con una oración completa, gramaticalmente cerrada con punto (.) o exclamación (!). NUNCA dejes frases cortadas a la mitad como "porque jamás...", "cuando descubrió que..." o "y todo por...".
 
@@ -109,7 +109,8 @@ TIEMPO | EFECTO | SFX | EMOJI | FLECHA | CIRCULO | TEXTO
    - Opcional: añade posición con dos puntos (:derecha, :izquierda, :arriba_der, :arriba_izq, :centro, :abajo). Ejemplo: diablo:derecha.
 
 5. FLECHA (Señalador dinámico flecha.png con tracking por visión artificial - dura ~1.8s):
-   - Valores permitidos: centro, izquierda, derecha, arriba, abajo, auto, X,Y porcentual (ej: 45,60), o ninguna.
+   - Valores permitidos: ninguna, X,Y porcentual (ej: 45,60), izquierda, derecha, arriba, abajo.
+   - PROHIBIDO usar 'centro' o 'auto': si no hay un objeto físico específico en pantalla para rastrear, DEBES poner 'ninguna'.
    - Úsala estratégicamente en 1 o 2 momentos clave para guiar el ojo del espectador exactamente a donde ocurre la acción. NUNCA en el último bloque.
 
 6. CIRCULO (Resaltador espacial circulo_rojo.png con Grounding de Alta Precisión):
@@ -138,7 +139,7 @@ ARCHIVO_SALIDA: auto
 
 [GUION]
 TIEMPO | EFECTO | SFX | EMOJI | FLECHA | CIRCULO | TEXTO
-00:00 - 00:04 | zoom_impacto | crowd_shocked | sorprendido:derecha | centro | ninguno | [14 a 16 palabras exactas con gancho explosivo que atrape en los primeros dos segundos]
+00:00 - 00:04 | zoom_impacto | crowd_shocked | sorprendido:derecha | ninguna | ninguno | [14 a 16 palabras exactas con gancho explosivo que atrape en los primeros dos segundos]
 00:04 - 00:08 | alerta_roja | riser_suction | diablo:izquierda | izquierda | box:[420,310,680,560]@05.2:objeto | [14 a 16 palabras exactas aumentando la intriga y señalando el detalle oculto en pantalla]
 00:08 - 00:13 | temblor | punch+xp_Error | risa:derecha | derecha | ninguno | [18 a 20 palabras exactas narrando el giro principal o impacto con máxima energía y ritmo]
-00:13 - 00:17 | brillo_epico | cash_ting+party_horn | fiesta:derecha | centro | ninguno | [14 a 16 palabras exactas cerrando en el clímax y conectando en loop con el inicio]
+00:13 - 00:17 | brillo_epico | cash_ting+party_horn | fiesta:derecha | ninguna | ninguno | [14 a 16 palabras exactas cerrando en el clímax con remate completo y conectando en loop con el inicio]

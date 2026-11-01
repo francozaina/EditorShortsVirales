@@ -394,6 +394,15 @@ def sanitizar_y_auditar_guion(raw_text: str, duracion_total: float) -> Tuple[str
             if circulos_usados > 2:
                 circulo = "ninguno"
 
+        # Normalizar flecha y círculo: purgar 'centro', 'medio' o 'auto' para evitar flechas estáticas clavadas
+        flecha_clean = flecha.strip().lower()
+        if flecha_clean in ("centro", "center", "medio", "auto"):
+            flecha = "ninguna"
+
+        circulo_clean = circulo.strip().lower()
+        if circulo_clean in ("centro", "center", "medio", "auto"):
+            circulo = "ninguno"
+
         # 5. Auditar conteo de palabras (2.8 - 4.0 palabras/seg)
         try:
             t_ini_str, t_fin_str = tiempo.split("-")
@@ -404,10 +413,33 @@ def sanitizar_y_auditar_guion(raw_text: str, duracion_total: float) -> Tuple[str
         except Exception:
             dur_bloque = 4.0
 
-        # Sanitizar texto: prohibir oraciones truncadas con '...' o conjunciones colgantes
+        # Sanitizar texto: prohibir oraciones truncadas con '...', conjunciones colgantes
+        # o cláusulas subordinadas incompletas (ej: "...para reírse porque este niño!")
         texto_limpio = texto.strip()
         texto_limpio = re.sub(r'[\.\s\u2026]+[!\?]*$', '', texto_limpio).strip()
-        colgantes = {'cuando', 'porque', 'pero', 'y', 'o', 'ya que', 'donde', 'si', 'sin', 'asi que', 'así que', 'que', 'para', 'de', 'con', 'a', 'jamas', 'jamás', 'nunca', 'repente'}
+
+        # Detección inteligente de cláusulas subordinadas inconclusas al final de la oración
+        pat_inconclusa = (
+            r'[,;]?\s*\b(porque|ya que|puesto que|cuando|mientras|donde|si|para que|así que|asi que|'
+            r'y todo por|todo por|hasta que|que)\s+([^.!?]+)[.!?]*$'
+        )
+        m_inc = re.search(pat_inconclusa, texto_limpio, re.IGNORECASE)
+        if m_inc:
+            tail_words = [w.lower().rstrip(',;:¡!¿?') for w in m_inc.group(2).split()]
+            verbos_clave = {
+                'era', 'fue', 'es', 'son', 'eran', 'había', 'habia', 'tiene', 'tenia', 'tenía',
+                'cayó', 'cayo', 'hizo', 'vio', 'salió', 'salio', 'dio', 'quedó', 'quedo',
+                'pudo', 'supo', 'dijo', 'vino', 'está', 'esta', 'estaba', 'están', 'estan',
+                'pasó', 'paso', 'ocurrió', 'ocurrio', 'terminó', 'termino', 'empezó', 'empezo',
+                'gritó', 'grito', 'rio', 'rió', 'lloró', 'lloro', 'escapó', 'escapo', 'cruces',
+                'sea', 'fuera', 'vaya', 'haga', 'tenga', 'pueda', 'llegó', 'llego', 'quiere',
+                'quieren', 'quisieron', 'decidió', 'decidio', 'supieron', 'vieron', 'salieron'
+            }
+            has_verb = any(w in verbos_clave or w.endswith(('ó', 'ió', 'aba', 'ía', 'aron', 'ieron', 'ará', 'erá', 'irá', 'an', 'en')) for w in tail_words)
+            if not has_verb and len(tail_words) <= 5:
+                texto_limpio = texto_limpio[:m_inc.start()].rstrip(',;: ')
+
+        colgantes = {'cuando', 'porque', 'pero', 'y', 'o', 'ya que', 'donde', 'si', 'sin', 'asi que', 'así que', 'que', 'para', 'de', 'con', 'a', 'jamas', 'jamás', 'nunca', 'repente', 'este', 'esta', 'estos', 'estas', 'el', 'la', 'los', 'las', 'un', 'una'}
         palabras_temp = texto_limpio.split()
         while palabras_temp and palabras_temp[-1].lower().rstrip(',;:¡!¿?') in colgantes:
             palabras_temp.pop()
@@ -761,13 +793,15 @@ class GeminiPoolOrchestrator:
                 if not cuentas_vivas:
                     continue
 
-                # Si el modelo a usar es gemini-3.5-flash-lite en la pasada con video, ejecutar el pipeline de 3 instancias en simultáneo
-                if model == "gemini-3.5-flash-lite" and video_part is not None and "video" in modo_nombre:
+                # Si el modelo a usar es gemini-3.6-flash o gemini-3.5-flash-lite, ejecutar el pipeline multi-agente adaptativo de 3 instancias
+                if model in ("gemini-3.6-flash", "gemini-3.5-flash-lite") and ("video" in modo_nombre or video_part is not None):
                     try:
-                        res_3inst = self._generar_guion_3_instancias_lite(
+                        res_3inst = self._generar_guion_3_instancias_adaptativo(
+                            modelo_objetivo=model,
                             video_part=video_part,
+                            mosaico_part=mosaico_part,
+                            video_path=video_path,
                             prompt_maestro=prompt_maestro,
-                            cuentas_vivas=cuentas_vivas,
                             timeout_seg=timeout_seg_actual,
                             dur_seg=dur_seg,
                             _notif=_notif,
@@ -778,7 +812,7 @@ class GeminiPoolOrchestrator:
                     except InterruptedError:
                         raise
                     except Exception as e_3:
-                        logger.warning(f"Error en pipeline 3 instancias de 3.5 Lite: {e_3}. Probando flujo normal...")
+                        logger.warning(f"Error en pipeline 3 instancias adaptativo ({model}): {e_3}. Probando flujo normal...")
 
                 for key_idx in cuentas_vivas:
                     if cancelar_check and cancelar_check():
@@ -886,37 +920,117 @@ class GeminiPoolOrchestrator:
             pass
         return guion_actual
 
-    def _generar_guion_3_instancias_lite(
+    def _generar_guion_3_instancias_adaptativo(
         self,
-        video_part: types.Part,
+        modelo_objetivo: str,
+        video_part: Optional[types.Part],
+        mosaico_part: Optional[types.Part],
+        video_path: Path,
         prompt_maestro: str,
-        cuentas_vivas: List[int],
         timeout_seg: float,
         dur_seg: float,
         _notif: Callable[[float, str], None],
         cancelar_check: Optional[Callable[[], bool]] = None,
     ) -> Optional[str]:
         """
-        Pipeline multi-agente de 3 instancias para Gemini 3.5 Flash Lite:
-        - Instancia 1: Genera borrador viral con gancho de alto impacto y tensión inmediata.
-        - Instancia 2: Genera borrador alternativo con gancho de intriga psicológica y curiosidad.
-          (Ambas instancias se ejecutan en simultáneo en paralelo).
-        - Instancia 3 (Revisor y Sintetizador): Recibe el video original + Borrador 1 + Borrador 2,
-          evalúa la retención, combina lo mejor de ambos con lo que realmente ocurre en pantalla,
-          y entrega el guion definitivo estructurado en formato [GUION].
+        Pipeline multi-agente adaptativo de triple revisión con IA (Gemini 3.6 Flash / 3.5 Lite):
+        - Evalúa dinámicamente la disponibilidad de cuota en vivo para Gemini 3.6 Flash y 3.5 Lite:
+          * 3+ cuentas 3.6 disponibles -> 3.6 (Borrador 1) + 3.6 (Borrador 2) -> 3.6 (Síntesis con Video)
+          * 2 cuentas 3.6 disponibles  -> 3.6 (Borrador 1) + 3.5 Lite (Borrador 2) -> 3.6 (Síntesis con Video)
+          * 1 cuenta 3.6 disponible    -> 3.5 Lite (Borrador 1) + 3.5 Lite (Borrador 2) -> 3.6 (Síntesis con Video)
+          * 0 cuentas 3.6 disponibles  -> 3x 3.5 Flash Lite
+        - Fallback transparente a Mosaico Storyboard si el envío del video inline falla o es rechazado.
+        - Instancia 3 sintetiza ambos borradores + inspección visual garantizando un cierre 100% conclusivo.
         """
         if cancelar_check and cancelar_check():
             raise InterruptedError("Generación de guion cancelada por el usuario.")
 
-        _notif(0.20, "Gemini 3.5 Lite: Generando 2 borradores virales en simultáneo (Instancias 1 y 2)...")
+        es_36 = ("3.6" in modelo_objetivo)
+        cuentas_36 = self.fast_probe_accounts("gemini-3.6-flash") if es_36 else []
+        cuentas_35 = self.fast_probe_accounts("gemini-3.5-flash-lite")
+        n_36 = len(cuentas_36)
+        n_35 = len(cuentas_35)
 
-        idx_c1 = cuentas_vivas[0]
-        idx_c2 = cuentas_vivas[1 % len(cuentas_vivas)]
-        idx_c3 = cuentas_vivas[2 % len(cuentas_vivas)] if len(cuentas_vivas) >= 3 else cuentas_vivas[0]
+        if es_36:
+            if n_36 >= 3:
+                mod_1, idx_c1 = "gemini-3.6-flash", cuentas_36[0]
+                mod_2, idx_c2 = "gemini-3.6-flash", cuentas_36[1]
+                mod_3, idx_c3 = "gemini-3.6-flash", cuentas_36[2]
+                desc_combo = "3x Gemini 3.6 Flash"
+            elif n_36 == 2:
+                mod_1, idx_c1 = "gemini-3.6-flash", cuentas_36[0]
+                mod_2, idx_c2 = "gemini-3.5-flash-lite", (cuentas_35[0] if cuentas_35 else cuentas_36[0])
+                mod_3, idx_c3 = "gemini-3.6-flash", cuentas_36[1]
+                desc_combo = "Híbrido (Draft 1: 3.6 + Draft 2: 3.5 Lite -> Síntesis: 3.6 Flash)"
+            elif n_36 == 1:
+                mod_1, idx_c1 = "gemini-3.5-flash-lite", (cuentas_35[0] if cuentas_35 else cuentas_36[0])
+                mod_2, idx_c2 = "gemini-3.5-flash-lite", (cuentas_35[1 % n_35] if n_35 > 1 else (cuentas_35[0] if cuentas_35 else cuentas_36[0]))
+                mod_3, idx_c3 = "gemini-3.6-flash", cuentas_36[0]
+                desc_combo = "Borradores 3.5 Lite + Síntesis Maestra con 3.6 Flash"
+            else:
+                mod_1, idx_c1 = "gemini-3.5-flash-lite", (cuentas_35[0] if cuentas_35 else 0)
+                mod_2, idx_c2 = "gemini-3.5-flash-lite", (cuentas_35[1 % n_35] if n_35 > 1 else (cuentas_35[0] if cuentas_35 else 0))
+                mod_3, idx_c3 = "gemini-3.5-flash-lite", (cuentas_35[2 % n_35] if n_35 > 2 else (cuentas_35[0] if cuentas_35 else 0))
+                desc_combo = "Fallback 3x Gemini 3.5 Flash Lite"
+        else:
+            mod_1, idx_c1 = "gemini-3.5-flash-lite", (cuentas_35[0] if cuentas_35 else 0)
+            mod_2, idx_c2 = "gemini-3.5-flash-lite", (cuentas_35[1 % n_35] if n_35 > 1 else (cuentas_35[0] if cuentas_35 else 0))
+            mod_3, idx_c3 = "gemini-3.5-flash-lite", (cuentas_35[2 % n_35] if n_35 > 2 else (cuentas_35[0] if cuentas_35 else 0))
+            desc_combo = "3x Gemini 3.5 Flash Lite"
+
+        _notif(0.20, f"Multi-Agente ({desc_combo}): Generando 2 borradores virales en simultáneo...")
 
         client_1 = self.clients[idx_c1]
         client_2 = self.clients[idx_c2]
         client_3 = self.clients[idx_c3]
+
+        _mosaico_cache = mosaico_part
+
+        def _obtener_mosaico():
+            nonlocal _mosaico_cache
+            if _mosaico_cache is None:
+                try:
+                    jpg_bytes, _ = generar_mosaico_video(video_path)
+                    _mosaico_cache = types.Part.from_bytes(data=jpg_bytes, mime_type="image/jpeg")
+                except Exception as ex_m:
+                    logger.warning(f"No se pudo crear mosaico de respaldo: {ex_m}")
+            return _mosaico_cache
+
+        def _ejecutar_llamada_con_fallback(client, model, prompt_txt, temp, timeout_ms):
+            # Intento 1: Video completo inline
+            if video_part is not None:
+                try:
+                    r = client.models.generate_content(
+                        model=model,
+                        contents=[video_part, prompt_txt],
+                        config=types.GenerateContentConfig(
+                            temperature=temp,
+                            http_options=types.HttpOptions(timeout=timeout_ms),
+                        ),
+                    )
+                    if r and r.text and len(r.text.strip()) > 80:
+                        return r.text
+                except Exception as ex_v:
+                    logger.info(f"Video rechazado en {model} ({ex_v}). Probando con mosaico...")
+
+            # Intento 2: Fallback relámpago con mosaico storyboard
+            m_part = _obtener_mosaico()
+            if m_part is not None:
+                try:
+                    nota = "\n[NOTA: Se adjunta mosaico cronológico del video con segundo exacto estampado]."
+                    r = client.models.generate_content(
+                        model=model,
+                        contents=[m_part, prompt_txt + nota],
+                        config=types.GenerateContentConfig(
+                            temperature=temp,
+                            http_options=types.HttpOptions(timeout=int(timeout_ms * 0.7)),
+                        ),
+                    )
+                    if r and r.text and len(r.text.strip()) > 80:
+                        return r.text
+                except Exception as ex_m:
+                    logger.warning(f"Error en fallback de mosaico ({model}): {ex_m}")
+            return None
 
         prompt_d1 = (
             prompt_maestro
@@ -937,31 +1051,17 @@ class GeminiPoolOrchestrator:
 
         def _worker_d1():
             try:
-                r1 = client_1.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    contents=[video_part, prompt_d1],
-                    config=types.GenerateContentConfig(
-                        temperature=0.45,
-                        http_options=types.HttpOptions(timeout=http_timeout),
-                    ),
-                )
-                if r1 and r1.text and len(r1.text.strip()) > 80:
-                    resp_d1["text"] = r1.text
+                res1 = _ejecutar_llamada_con_fallback(client_1, mod_1, prompt_d1, 0.45, http_timeout)
+                if res1:
+                    resp_d1["text"] = res1
             except Exception as ex:
                 resp_d1["err"] = ex
 
         def _worker_d2():
             try:
-                r2 = client_2.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    contents=[video_part, prompt_d2],
-                    config=types.GenerateContentConfig(
-                        temperature=0.55,
-                        http_options=types.HttpOptions(timeout=http_timeout),
-                    ),
-                )
-                if r2 and r2.text and len(r2.text.strip()) > 80:
-                    resp_d2["text"] = r2.text
+                res2 = _ejecutar_llamada_con_fallback(client_2, mod_2, prompt_d2, 0.55, http_timeout)
+                if res2:
+                    resp_d2["text"] = res2
             except Exception as ex:
                 resp_d2["err"] = ex
 
@@ -992,7 +1092,8 @@ class GeminiPoolOrchestrator:
             txt_unico = txt_d1 or txt_d2
             bloque_borradores = "=== BORRADOR BASE ===\n" + txt_unico.strip()
 
-        _notif(0.55, "Gemini 3.5 Lite: Instancia 3 revisando borradores con el video y sintetizando guion final...")
+        nom_mod3 = NOMBRES_UI.get(mod_3, mod_3)
+        _notif(0.55, f"Multi-Agente ({desc_combo}): Instancia 3 ({nom_mod3}) sintetizando guion definitivo con el video...")
 
         instruccion_sintesis = (
             "Eres el Editor Jefe de YouTube Shorts y Revisor de Retención Viral de Google.\n"
@@ -1002,8 +1103,9 @@ class GeminiPoolOrchestrator:
             + "1. Inspecciona el video adjunto y revisa los borradores generados.\n"
             + "2. Extrae el gancho inicial (primeros 3 segundos) más potente e irresistible de cualquiera de los dos.\n"
             + "3. Combina la mejor narración, las observaciones visuales más precisas y los momentos de mayor impacto de ambos borradores (cero spoilers, narración en tiempo real).\n"
-            + "4. Elige los mejores SFX, emojis, flechas/círculos y zooms que maximicen la retención y la sincronización con lo que pasa en pantalla.\n"
-            + "5. Asegura una cadencia perfecta (ritmo dinámico de 2.8 a 3.8 palabras por segundo por bloque).\n\n"
+            + "4. Elige los mejores SFX, emojis, flechas/círculos y zooms que maximicen la retención y la sincronización con lo que pasa en pantalla (recuerda: NUNCA uses 'centro' ni 'auto' para flecha; pon 'ninguna' si no hay un objeto específico que apuntar).\n"
+            + "5. Asegura una cadencia perfecta (ritmo dinámico de 2.8 a 3.8 palabras por segundo por bloque).\n"
+            + "6. CIERRE PERFECTO Y CONCLUSIVO: La última oración del último bloque DEBE quedar 100% terminada sintácticamente con sentido completo, remate contundente y signo de exclamación (!) o punto final. NUNCA cortes la última oración dejando palabras a medias ni conectores colgantes.\n\n"
             + prompt_maestro
         )
 
@@ -1011,16 +1113,9 @@ class GeminiPoolOrchestrator:
 
         def _worker_s3():
             try:
-                r3 = client_3.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    contents=[video_part, instruccion_sintesis],
-                    config=types.GenerateContentConfig(
-                        temperature=0.30,
-                        http_options=types.HttpOptions(timeout=http_timeout),
-                    ),
-                )
-                if r3 and r3.text and len(r3.text.strip()) > 80:
-                    resp_s3["text"] = r3.text
+                res3 = _ejecutar_llamada_con_fallback(client_3, mod_3, instruccion_sintesis, 0.30, http_timeout)
+                if res3:
+                    resp_s3["text"] = res3
             except Exception as ex:
                 resp_s3["err"] = ex
 
@@ -1037,14 +1132,18 @@ class GeminiPoolOrchestrator:
             txt_final = txt_d1 or txt_d2
 
         if txt_final and len(txt_final.strip()) > 80:
-            _notif(0.85, "Gemini 3.5 Lite: Validando cadencia y catálogo de efectos...")
+            _notif(0.85, f"Multi-Agente ({desc_combo}): Validando cadencia y catálogo de efectos...")
             guion_limpio, advertencias = sanitizar_y_auditar_guion(txt_final, dur_seg)
             if len(advertencias) >= 2:
-                guion_limpio = self._reparar_conteo_palabras(client_3, "gemini-3.5-flash-lite", guion_limpio, advertencias)
-            _notif(1.0, "✓ Guion completado con éxito (3 instancias de Gemini 3.5 Lite).")
+                guion_limpio = self._reparar_conteo_palabras(client_3, mod_3, guion_limpio, advertencias)
+            _notif(1.0, f"✓ Guion completado con éxito ({desc_combo}).")
             return guion_limpio
 
         return None
+
+    def _generar_guion_3_instancias_lite(self, *args, **kwargs):
+        """Alias para compatibilidad hacia atrás."""
+        return self._generar_guion_3_instancias_adaptativo(*args, **kwargs)
 
 # Instancia única en memoria para conservar la caché de salud durante la sesión
 _ORCHESTRATOR_INSTANCE: Optional[GeminiPoolOrchestrator] = None
@@ -1070,11 +1169,11 @@ Tu única misión es VER Y ANALIZAR segundo a segundo el video y redactar un gui
 ================================================================================
 1. GANCHO DEMOLEDOR (00:00 - 00:04):
    - Abre INMEDIATAMENTE en medio de la acción planteando un peligro, trampa o pregunta visual urgente.
-   - El primer bloque SIEMPRE usa `zoom_impacto` + SFX (`crowd_shocked` o `boxing_bell`) + FLECHA al foco de atención.
+   - El primer bloque abre con gancho explosivo con `zoom_impacto` o `zoom_in` + SFX (`crowd_shocked` o `boxing_bell`). Si NO hay un objeto físico clave y concreto que señalar en pantalla, pon 'ninguna' en FLECHA. NUNCA fuerces una flecha vacía.
 2. ESCALADA DE CURIOSIDAD (Bloques intermedios):
    - Conectores de tensión: "¡Pero mira con atención lo que hace!", "¡Lo que no imagina es que...", "¡Cuidado porque el plan recién empieza!".
-3. FINAL ABRUPTO + LOOP INFINITO:
-   - Narra hasta el último milisegundo. La última frase debe conectar rítmicamente con la primera para que el espectador repita el video.
+3. REMATE CONCLUSIVO Y REDONDO + LOOP INFINITO (Último bloque):
+   - Narra hasta el último milisegundo, pero la última oración del último bloque DEBE quedar 100% terminada sintácticamente con sentido completo, remate contundente y signo de exclamación (!) o punto final. NUNCA dejes frases cortadas ni conectores subordinados inconclusos (ejemplos prohibidos: "...porque este...", "...cuando la...", "...para que...").
 
 ================================================================================
 🎯 SINCRONIZACIÓN VISUAL REAL (PROHIBIDO ADELANTARSE A LOS HECHOS)
@@ -1109,7 +1208,7 @@ TIEMPO | EFECTO | SFX | EMOJI | FLECHA | CIRCULO | TEXTO
 2. EFECTO: zoom_impacto, zoom_in, zoom_out, flash, temblor, alerta_roja, brillo_epico, blanco_negro, spotlight, ninguno.
 3. SFX: crowd_shocked, whoosh, riser_suction, vine_boom, metal_pipe, heartbeat_fast, record_scratch, suspense_hit, ding, good_idea, cash_ting, punch, boxing_bell, camera_flash, camera_shooter, cartoon_laugh, kids_yeyy, party_horn, awww, error, xp_Error, fart, click, pop, ninguno (máx 2 combinados con +).
 4. EMOJI: sorprendido, risa, fiesta, diablo, enojo, lloro, sueno, calavera, cerebro, fuego, ojos, ninguno (opcional :derecha, :izquierda, :arriba_der, :arriba_izq, :centro, :abajo).
-5. FLECHA: centro, izquierda, derecha, arriba, abajo, auto, X,Y porcentual (ej: 45,60) o ninguna. Máx 1 o 2 en el video, nunca al final.
+5. FLECHA: ninguna, X,Y porcentual (ej: 45,60), izquierda, derecha, arriba, abajo. PROHIBIDO usar 'centro' o 'auto'. Máx 1 o 2 en el video, nunca al final.
 6. CIRCULO: 'box:[ymin,xmin,ymax,xmax]@t_ancla:etiqueta' o 'ninguno'. Máx 1 en todo el video.
 7. TEXTO: Narración continua cumpliendo la tabla exacta de palabras sin CTA.
 
@@ -1128,10 +1227,10 @@ ARCHIVO_SALIDA: auto
 
 [GUION]
 TIEMPO | EFECTO | SFX | EMOJI | FLECHA | CIRCULO | TEXTO
-00:00 - 00:04 | zoom_impacto | crowd_shocked | sorprendido:derecha | centro | ninguno | [12 a 15 palabras exactas con gancho explosivo]
+00:00 - 00:04 | zoom_impacto | crowd_shocked | sorprendido:derecha | ninguna | ninguno | [12 a 15 palabras exactas con gancho explosivo]
 00:04 - 00:08 | alerta_roja | riser_suction | diablo:izquierda | izquierda | ninguno | [12 a 15 palabras aumentando intriga]
 00:08 - 00:13 | temblor | punch+xp_Error | risa:derecha | derecha | ninguno | [15 a 18 palabras narrando el clímax con máxima energía]
-00:13 - 00:17 | brillo_epico | cash_ting+party_horn | fiesta:derecha | centro | ninguno | [12 a 15 palabras conectando en loop con el inicio]"""
+00:13 - 00:17 | brillo_epico | cash_ting+party_horn | fiesta:derecha | ninguna | ninguno | [12 a 15 palabras cerrando con remate completo y conectando en loop con el inicio]"""
 
 
 def obtener_modelos_plantilla() -> List[Dict[str, Any]]:

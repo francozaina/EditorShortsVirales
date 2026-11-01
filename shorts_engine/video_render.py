@@ -1760,10 +1760,10 @@ async def editar_video_con_guion(
                     )
                     pt_c_screen, pt_f_screen = pts_pantalla[0], pts_pantalla[1]
 
-                    # 1) Círculo Rojo siguiendo al objetivo (solo activo desde su tiempo ancla)
+                    # 1) Círculo Rojo siguiendo al objetivo (solo activo con trayectoria real confirmada)
                     radio_circulo = gestor_assets.dibujar_circulo_rojo(
                         lienzo=lienzo,
-                        activo=bool(seg.circulo),
+                        activo=bool(seg.circulo and trayectoria_circulo is not None),
                         target_xy=pt_c_screen,
                         tamano_mod=seg.tamano_circulo,
                         t_seg=t_seg,
@@ -1771,7 +1771,7 @@ async def editar_video_con_guion(
                         t_inicio_callout=t_ini_callout_circulo,
                     )
 
-                    # 2) Flecha Roja siguiendo al objetivo (con soporte de rotación personalizada @deg)
+                    # 2) Flecha Roja siguiendo al objetivo (solo activa con trayectoria real confirmada)
                     radio_para_flecha = radio_circulo if mismo_objetivo else 0.0
                     ang_flecha = None
                     if seg.flecha:
@@ -1784,7 +1784,7 @@ async def editar_video_con_guion(
 
                     gestor_assets.dibujar_flecha_roja(
                         lienzo=lienzo,
-                        activo=bool(seg.flecha),
+                        activo=bool(seg.flecha and trayectoria_flecha is not None),
                         target_xy=pt_f_screen,
                         radio_circulo_activo=radio_para_flecha,
                         t_seg=t_seg,

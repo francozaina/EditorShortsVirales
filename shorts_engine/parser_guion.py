@@ -283,7 +283,7 @@ def _normalizar_objetivo(obj_raw: Optional[str]) -> Tuple[Optional[str], str]:
         else:
             raw = mod_clean
 
-    if not raw or raw in ("ninguno", "ninguna", "none", "no", "false", "-", "0"):
+    if not raw or raw in ("ninguno", "ninguna", "none", "no", "false", "-", "0", "centro", "center", "medio", "middle", "auto"):
         return None, tamano
 
     if raw in ("si", "yes", "true", "1", "activo", "activar", "mismo", "igual"):
