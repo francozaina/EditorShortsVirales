@@ -331,6 +331,7 @@ def iniciar_aplicacion_gui() -> None:
             "custom_reels": [],
             "modo_render": "Automático (GPU)",
             "perfiles_personalidad_canales": {},
+            "modo_pasadas_ia": "Triple Pasada IA (3x)",
         }
         if SCHEDULE_MEM_FILE.exists():
             try:
@@ -378,6 +379,7 @@ def iniciar_aplicacion_gui() -> None:
                     "custom_reels": list(leido.get("custom_reels", [])),
                     "modo_render": str(leido.get("modo_render", "Automático (GPU)")),
                     "perfiles_personalidad_canales": dict(leido.get("perfiles_personalidad_canales") or {}),
+                    "modo_pasadas_ia": str(leido.get("modo_pasadas_ia", "Triple Pasada IA (3x)")),
                 }
             except Exception:
                 pass
@@ -402,6 +404,7 @@ def iniciar_aplicacion_gui() -> None:
     modo_fuente_var = tk.StringVar(value=str(mem["modo_fuente"]))
     modo_contenido_var = tk.StringVar(value=str(mem["modo_contenido"]))
     modo_subida_var = tk.StringVar(value=str(mem.get("modo_subida", "Subida Automática")))
+    modo_pasadas_ia_var = tk.StringVar(value=str(mem.get("modo_pasadas_ia", "Triple Pasada IA (3x)")))
     accion_final_var = tk.StringVar(value=str(mem.get("accion_final", "Subir automáticamente")))
     modelo_ia_var = tk.StringVar(value=str(mem["modelo_ia"]))
     modo_render_var = tk.StringVar(value=str(mem.get("modo_render", "Automático (GPU)")))
@@ -551,6 +554,7 @@ def iniciar_aplicacion_gui() -> None:
                         "custom_reels": datos_custom_reels[:12],
                         "modo_render": modo_render_var.get(),
                         "perfiles_personalidad_canales": perfiles_personalidad_canales,
+                        "modo_pasadas_ia": modo_pasadas_ia_var.get(),
                     },
                     indent=2,
                 ),
@@ -2040,7 +2044,7 @@ def iniciar_aplicacion_gui() -> None:
         win = ctk.CTkToplevel(root)
         win.withdraw()
         win.title("Ajustes y Herramientas")
-        win.geometry("620x820")
+        win.geometry("620x880")
         win.resizable(False, False)
         win.configure(fg_color=BG_DARK)
         win.transient(root)
@@ -2083,6 +2087,113 @@ def iniciar_aplicacion_gui() -> None:
             values=["Subida Automática", "Revisión Previa", "Edición Manual"],
             variable=modo_subida_var,
             command=_al_cambiar_modo_subida,
+            corner_radius=14,
+            height=32,
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            selected_color=PURPLE_MAIN,
+        ).pack(fill="x", padx=18, pady=(0, 12))
+
+        # Modo de Generación con IA (Una Pasada vs Triple Pasada)
+        row_pasadas_hdr = ctk.CTkFrame(card_modo, fg_color="transparent")
+        row_pasadas_hdr.pack(fill="x", padx=18, pady=(2, 4))
+
+        ctk.CTkLabel(
+            row_pasadas_hdr,
+            text="Generación y Análisis de Guion con IA",
+            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
+            text_color=TEXT_MAIN,
+        ).pack(side="left")
+
+        def _mostrar_ayuda_pasadas_ia():
+            win_h = ctk.CTkToplevel(win)
+            win_h.withdraw()
+            win_h.title("Guía de Generación con IA")
+            win_h.resizable(False, False)
+            win_h.configure(fg_color=BG_DARK)
+            aplicar_icono_ventana(win_h)
+            win_h.transient(win)
+            win_h.grab_set()
+
+            f_c = ctk.CTkFrame(win_h, fg_color="#101524", corner_radius=16, border_width=1, border_color="#222b42")
+            f_c.pack(fill="both", expand=True, padx=14, pady=14)
+
+            ctk.CTkLabel(
+                f_c,
+                text="¿Una Pasada o Triple Pasada de IA?",
+                font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
+                text_color=TEXT_MAIN,
+            ).pack(anchor="w", padx=16, pady=(12, 8))
+
+            texto_guia_pasadas = (
+                "Una Pasada (1x Rápida):\n"
+                "• Un único modelo de IA analiza el video y redacta el guion completo de corrido.\n"
+                "• Es la opción más rápida (~10 a 15 segundos).\n"
+                "• Consume únicamente 1 llamada a tu cuota diaria de Gemini.\n"
+                "• Recomendada cuando tienes poca cuota o quieres procesar muchos videos velozmente.\n\n"
+                "Triple Pasada IA (3x Máxima Calidad):\n"
+                "• Dos instancias de IA analizan el video en paralelo y arman dos propuestas de guion independientes.\n"
+                "• Una tercera instancia maestra compara ambos borradores junto con el video, fusiona las mejores ideas de retención, perfecciona el hook de inicio y garantiza un remate 100% conclusivo.\n"
+                "• Alterna inteligentemente entre Gemini 3.6 Flash y 3.5 Flash Lite según tus claves disponibles.\n"
+                "• Recomendada para máxima viralidad, retención y final sin frases cortadas."
+            )
+
+            ctk.CTkLabel(
+                f_c,
+                text=texto_guia_pasadas,
+                font=ctk.CTkFont(family="Segoe UI", size=11),
+                text_color="#cbd5e1",
+                justify="left",
+                anchor="w",
+                wraplength=480,
+            ).pack(fill="x", padx=16, pady=(0, 14))
+
+            ctk.CTkButton(
+                f_c,
+                text="Entendido",
+                command=win_h.destroy,
+                corner_radius=10,
+                height=28,
+                width=100,
+                fg_color=PURPLE_MAIN,
+                hover_color=PURPLE_HOVER,
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            ).pack(pady=(0, 6))
+
+            win_h.update_idletasks()
+            w_req = max(520, win_h.winfo_reqwidth())
+            h_req = win_h.winfo_reqheight() + 10
+            try:
+                x = win.winfo_x() + (win.winfo_width() // 2) - (w_req // 2)
+                y = win.winfo_y() + (win.winfo_height() // 2) - (h_req // 2)
+                win_h.geometry(f"{w_req}x{h_req}+{max(0, x)}+{max(0, y)}")
+            except Exception:
+                win_h.geometry(f"{w_req}x{h_req}")
+            win_h.deiconify()
+
+        btn_ayuda_pasadas = ctk.CTkButton(
+            row_pasadas_hdr,
+            text="?",
+            command=_mostrar_ayuda_pasadas_ia,
+            corner_radius=11,
+            width=22,
+            height=22,
+            fg_color="#1e293b",
+            hover_color="#334155",
+            border_width=1,
+            border_color="#334155",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=CYAN_ACCENT,
+        )
+        btn_ayuda_pasadas.pack(side="left", padx=(8, 0))
+
+        def _al_cambiar_modo_pasadas(_val=None):
+            _guardar_memoria()
+
+        ctk.CTkSegmentedButton(
+            card_modo,
+            values=["Una Pasada (1x)", "Triple Pasada IA (3x)"],
+            variable=modo_pasadas_ia_var,
+            command=_al_cambiar_modo_pasadas,
             corner_radius=14,
             height=32,
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
@@ -6208,6 +6319,7 @@ def iniciar_aplicacion_gui() -> None:
                                     modelo_preferido=pref_modelo_ia,
                                     progreso_cb=_cb_tit_solo,
                                     cancelar_check=lambda: evento_cancelar.is_set(),
+                                    modo_pasadas=modo_pasadas_ia_var.get(),
                                 )
                                 if evento_cancelar.is_set():
                                     raise InterruptedError("Operación detenida por el usuario tras generar el título.")
@@ -6292,6 +6404,7 @@ def iniciar_aplicacion_gui() -> None:
                                     progreso_cb=_cb_guion,
                                     auto_auditoria_retrospectiva=es_auto_auditoria,
                                     cancelar_check=lambda: evento_cancelar.is_set(),
+                                    modo_pasadas=modo_pasadas_ia_var.get(),
                                 )
                                 if evento_cancelar.is_set():
                                     raise InterruptedError("Operación detenida por el usuario tras generar el guion.")
@@ -6505,6 +6618,7 @@ def iniciar_aplicacion_gui() -> None:
                                             progreso_cb=_cb_guion_otro,
                                             auto_auditoria_retrospectiva=True,
                                             cancelar_check=lambda: evento_cancelar.is_set(),
+                                            modo_pasadas=modo_pasadas_ia_var.get(),
                                         )
                                         if evento_cancelar.is_set():
                                             raise InterruptedError("Operación detenida por el usuario tras generar el guion.")

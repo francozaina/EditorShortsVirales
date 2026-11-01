@@ -728,6 +728,7 @@ class GeminiPoolOrchestrator:
         timeout_video_seg: float = 40.0,
         modelo_preferido: Optional[str] = None,
         cancelar_check: Optional[Callable[[], bool]] = None,
+        triple_pasada: bool = True,
     ) -> str:
         """
         Ejecuta el Single-Pass Master Prompt:
@@ -794,7 +795,7 @@ class GeminiPoolOrchestrator:
                     continue
 
                 # Si el modelo a usar es gemini-3.6-flash o gemini-3.5-flash-lite, ejecutar el pipeline multi-agente adaptativo de 3 instancias
-                if model in ("gemini-3.6-flash", "gemini-3.5-flash-lite") and ("video" in modo_nombre or video_part is not None):
+                if triple_pasada and model in ("gemini-3.6-flash", "gemini-3.5-flash-lite") and ("video" in modo_nombre or video_part is not None):
                     try:
                         res_3inst = self._generar_guion_3_instancias_adaptativo(
                             modelo_objetivo=model,
@@ -1285,6 +1286,7 @@ def generar_guion_con_gemini_flash(
     auto_auditoria_retrospectiva: bool = False,
     guion_previo: Optional[str] = None,
     cancelar_check: Optional[Callable[[], bool]] = None,
+    modo_pasadas: str = "Triple Pasada (3x)",
 ) -> str:
     """
     Punto de entrada maestro para generar guiones virales:
@@ -1367,6 +1369,7 @@ def generar_guion_con_gemini_flash(
         "\nEntrega ÚNICAMENTE el bloque estructurado del guion final con la plantilla obligatoria:"
     )
 
+    es_triple = ("triple" in str(modo_pasadas).lower() or "3x" in str(modo_pasadas).lower() or "3" in str(modo_pasadas).lower())
     texto_respuesta = _ORCHESTRATOR_INSTANCE.generar_guion_completo(
         video_path=ruta_video,
         prompt_maestro=prompt_maestro,
@@ -1374,6 +1377,7 @@ def generar_guion_con_gemini_flash(
         timeout_video_seg=38.0,
         modelo_preferido=modelo_preferido,
         cancelar_check=cancelar_check,
+        triple_pasada=es_triple,
     )
 
     DEFAULT_GUION_TXT.write_text(texto_respuesta + "\n", encoding="utf-8")

@@ -1632,7 +1632,6 @@ async def editar_video_con_guion(
 
         cmd_ffmpeg = [
             "ffmpeg", "-y",
-            *(["-map_metadata", "-1"] if limpiar_metadatos else []),
             "-f", "rawvideo",
             "-vcodec", "rawvideo",
             "-s", f"{WIDTH}x{HEIGHT}",
@@ -1647,6 +1646,7 @@ async def editar_video_con_guion(
             "-color_range", "tv",
             "-c:a", "aac",
             "-b:a", "192k",
+            *(["-map_metadata", "-1"] if limpiar_metadatos else []),
             "-shortest",
             "-movflags", "+faststart",
             str(ruta_mp4_final),
