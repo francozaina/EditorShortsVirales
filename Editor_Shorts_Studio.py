@@ -588,30 +588,21 @@ def iniciar_aplicacion_gui() -> None:
     header_right = ctk.CTkFrame(header, fg_color="transparent")
     header_right.pack(side="right")
 
-    # Tarjeta Píldora de Personalidad del Video (Sin Emojis en pestaña principal)
-    pers_pill = ctk.CTkFrame(header_right, fg_color=CARD_BG, corner_radius=16, border_width=1, border_color=CARD_BORDER)
-    pers_pill.pack(side="left", padx=(0, 8), pady=4)
-
-    lbl_resumen_personalidad = ctk.CTkLabel(
-        pers_pill,
-        text="Voz + Estilo Único",
-        font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-        text_color="#a78bfa",
-    )
-    lbl_resumen_personalidad.pack(side="left", padx=(12, 8), pady=4)
-
+    # Botón Personalizar Video de Canal (Sin Emojis en pestaña principal)
     btn_personalidad_canal = ctk.CTkButton(
-        pers_pill,
-        text="Personalidad Video",
+        header_right,
+        text="Personalizar Video de Canal",
         command=lambda: abrir_modal_personalidad_canal(),
-        height=28,
-        corner_radius=12,
-        fg_color=PURPLE_MAIN,
-        hover_color=PURPLE_HOVER,
-        font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+        height=40,
+        corner_radius=20,
+        fg_color=CARD_BG,
+        hover_color="#1f2637",
+        border_width=1,
+        border_color=CARD_BORDER,
+        font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
         text_color=TEXT_MAIN,
     )
-    btn_personalidad_canal.pack(side="left", padx=(0, 6), pady=4)
+    btn_personalidad_canal.pack(side="left", padx=(0, 8), pady=4)
 
     def agregar_api_json_gui(parent_win: Optional[tk.Misc] = None) -> None:
         from tkinter import filedialog
