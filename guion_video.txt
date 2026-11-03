@@ -15,5 +15,5 @@ TIEMPO | EFECTO | SFX | EMOJI | FLECHA | CIRCULO | ALTURA | TEXTO
 00:00 - 00:05 | zoom_impacto | crowd_shocked | sorprendido:derecha | ninguna | ninguno | 70% | ¡Esta chica creía que podía trolear a su abuela en el ping pong sin pagar las consecuencias!
 00:05 - 00:11 | alerta_roja | riser_suction | diablo:izquierda | ninguna | ninguno | 70% | ¡Luego volvió a engañarla en el juego de piedras, pensando que esta anciana jamás se daría cuenta!
 00:11 - 00:16 | temblor | punch+xp_error | risa:derecha | derecha | ninguno | 70% | ¡Pero lo que esta nieta confiada no esperaba es que la abuela preparaba una venganza glacial!
-00:16 - 00:20 | flash | suspense_hit | ojos:derecha | ninguna | ninguno | 70% | ¡Llegó la hora de comer y la dulce abuela levanta la tapa misteriosa en la mesa!
+00:16 - 00:20 | flash | riser_suction | ojos:derecha | ninguna | ninguno | 70% | ¡Llegó la hora de comer y la dulce abuela levanta la tapa misteriosa en la mesa!
 00:20 - 00:25 | brillo_epico | cash_ting+party_horn | fiesta:derecha | ninguna | ninguno | 70% | ¡Y le revienta tremenda nube de harina en el rostro para demostrar quién manda en la familia!

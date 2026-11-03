@@ -3018,7 +3018,7 @@ def iniciar_aplicacion_gui() -> None:
     def abrir_selector_cuentas_popup() -> None:
         pop = ctk.CTkToplevel(root)
         pop.title("Elegir Cuenta o Grupo de Subida")
-        pop.geometry("490x560")
+        pop.geometry("520x580")
         pop.resizable(False, False)
         pop.configure(fg_color=BG_DARK)
         pop.transient(root)
@@ -3152,12 +3152,10 @@ def iniciar_aplicacion_gui() -> None:
             m_sel = mapa_modo_seg.get(m_txt, "una")
             if m_sel in ("todas", "grupo"):
                 frame_strat.grid()
-                if bot_bar is not None:
-                    bot_bar.grid()
             else:
                 frame_strat.grid_remove()
-                if bot_bar is not None:
-                    bot_bar.grid_remove()
+            if bot_bar is not None:
+                bot_bar.grid()
 
             if m_sel == "todas":
                 f_todas = ctk.CTkFrame(lista_scroll, fg_color="#182032", corner_radius=14, border_width=1, border_color="#26334d")
@@ -3265,6 +3263,48 @@ def iniciar_aplicacion_gui() -> None:
                     refrescar_plan_ui()
                     _guardar_memoria()
 
+                # Contenedor derecho de controles y acciones
+                col_derecha = ctk.CTkFrame(item_f, fg_color="transparent")
+                col_derecha.pack(side="right", padx=(4, 10), pady=6)
+
+                def _desvincular_esta(cx=c_id, nomx=c_nom) -> None:
+                    if messagebox.askyesno(
+                        "Desvincular Cuenta",
+                        f"¿Estás seguro de que deseas desvincular '{nomx}'?\nSe eliminarán sus credenciales guardadas.",
+                        parent=pop,
+                    ):
+                        try:
+                            from subir_a_youtube import desvincular_cuenta, listar_cuentas_vinculadas
+                            desvincular_cuenta(cx)
+                            if estado_seleccion_cuentas.get("cuenta_id") == cx:
+                                estado_seleccion_cuentas["cuenta_id"] = ""
+                            nonlocal cuentas_disp
+                            cuentas_disp = listar_cuentas_vinculadas()
+                            if not cuentas_disp:
+                                cuentas_disp = [{"id": "principal", "nombre": "Canal Principal", "avatar_path": ""}]
+                            refrescar_selector_cuentas_ui()
+                            refrescar_plan_ui()
+                            _guardar_memoria()
+                            _render_lista_popup()
+                        except Exception as e_desv:
+                            messagebox.showerror("Error", f"No se pudo desvincular la cuenta:\n{e_desv}", parent=pop)
+
+                btn_desv = ctk.CTkButton(
+                    col_derecha,
+                    text="Desvincular",
+                    command=lambda cx=c_id, nomx=c_nom: _desvincular_esta(cx, nomx),
+                    width=75,
+                    height=26,
+                    corner_radius=8,
+                    fg_color="#181e2b",
+                    hover_color="#7f1d1d",
+                    border_width=1,
+                    border_color="#2d3748",
+                    text_color="#f87171",
+                    font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                )
+                btn_desv.pack(side="right", padx=(6, 2))
+
                 if m_sel == "una":
                     def _marcar_esta(_e=None, cid_x=c_id):
                         cid_temp.set(cid_x)
@@ -3272,7 +3312,7 @@ def iniciar_aplicacion_gui() -> None:
                         estado_seleccion_cuentas["cuenta_id"] = cid_x
                         _sincronizar_canales_de_cuenta_activa(cid_x, guardar_previo=True)
                         _aplicar_cambios_inmediatos()
-                        pop.destroy()
+                        _render_lista_popup()
 
                     partes_clic = [item_f, info_col, lbl_nom, lbl_can]
                     if lbl_av is not None:
@@ -3286,11 +3326,23 @@ def iniciar_aplicacion_gui() -> None:
 
                     if es_activa:
                         ctk.CTkLabel(
-                            item_f,
+                            col_derecha,
                             text="✓ Activa",
                             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                             text_color=GREEN_ACCENT,
-                        ).pack(side="right", padx=16)
+                        ).pack(side="right", padx=(4, 6))
+                    else:
+                        ctk.CTkButton(
+                            col_derecha,
+                            text="Elegir",
+                            command=lambda cx=c_id: _marcar_esta(None, cx),
+                            width=55,
+                            height=26,
+                            corner_radius=8,
+                            fg_color=PURPLE_MAIN,
+                            hover_color=PURPLE_HOVER,
+                            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                        ).pack(side="right", padx=(4, 6))
                 elif m_sel == "grupo":
                     if c_id not in vars_checks_grupo:
                         vars_checks_grupo[c_id] = tk.BooleanVar(
@@ -3316,7 +3368,7 @@ def iniciar_aplicacion_gui() -> None:
                             pass
 
                     ctk.CTkCheckBox(
-                        item_f,
+                        col_derecha,
                         text="",
                         variable=vars_checks_grupo[c_id],
                         command=_al_cambiar_check_grupo,
@@ -3326,14 +3378,14 @@ def iniciar_aplicacion_gui() -> None:
                         corner_radius=6,
                         fg_color=PURPLE_MAIN,
                         hover_color=PURPLE_HOVER,
-                    ).pack(side="right", padx=10)
+                    ).pack(side="right", padx=(4, 6))
                 elif m_sel == "todas":
                     ctk.CTkLabel(
-                        item_f,
+                        col_derecha,
                         text="Incluida",
                         font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                         text_color=GREEN_ACCENT,
-                    ).pack(side="right", padx=14)
+                    ).pack(side="right", padx=(4, 6))
 
         def _al_cambiar_modo_toggle(val_modo: str) -> None:
             m_f = mapa_modo_seg.get(val_modo, "una")
@@ -5435,7 +5487,8 @@ def iniciar_aplicacion_gui() -> None:
             def _descartar_para_siempre() -> None:
                 try:
                     from shorts_engine.youtube_manager import descartar_video_para_siempre
-                    descartar_video_para_siempre(_obtener_url_activa())
+                    cid_act = str(estado_seleccion_cuentas.get("cuenta_id") or "principal")
+                    descartar_video_para_siempre(_obtener_url_activa(), cuenta_id=cid_act)
                 except Exception:
                     pass
                 _responder("descartar")

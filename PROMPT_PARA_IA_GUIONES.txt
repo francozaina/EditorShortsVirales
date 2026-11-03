@@ -66,13 +66,12 @@ TIEMPO | EFECTO | SFX | EMOJI | FLECHA | CIRCULO | TEXTO
    - blanco_negro -> Desaturación dramática (fails tristes, traiciones o desastres).
    - ninguno      -> Movimiento orgánico base.
 
-3. SFX (Elige SOLO UNO de estos 24 sonidos exactos, o combina máximo dos con `+`, ej: `riser_suction+vine_boom`):
+3. SFX (Elige SOLO UNO de estos 23 sonidos exactos, o combina máximo dos con `+`, ej: `riser_suction+vine_boom`):
    - vine_boom      -> Impacto grave viral (el mejor para miradas sospechosas, giros o sorpresas).
    - crowd_shocked  -> Multitud impactada (ideal en 00:00 o revelación increíble).
    - riser_suction  -> Subida de tensión absorbente (justo antes del golpe o giro).
    - heartbeat_fast -> Latido acelerado de máxima tensión (combina perfecto con `alerta_roja`).
    - record_scratch -> Freno brusco de vinilo (cuando algo sale mal de golpe).
-   - suspense_hit   -> Golpe orquestal dramático de película.
    - metal_pipe     -> Estruendo metálico brutal para caídas, choques o destrozos.
    - punch          -> Impacto seco de golpe físico.
    - whoosh         -> Corte de aire veloz para cambios de plano o movimiento rápido.

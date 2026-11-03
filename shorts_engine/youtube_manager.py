@@ -224,19 +224,22 @@ def etiqueta_corta_canal(url_canal: str) -> str:
 
 
 def cargar_videos_usados(cuenta_id: Optional[str] = None) -> Set[str]:
+    """
+    Retorna el conjunto de IDs de videos ya utilizados para la cuenta indicada.
+    Si se especifica cuenta_id, SOLO retorna los de esa cuenta, evitando bloquear
+    el video en otros canales de YouTube.
+    """
     if HISTORIAL_USADOS_FILE.exists():
         try:
             datos = json.loads(HISTORIAL_USADOS_FILE.read_text(encoding="utf-8"))
             if isinstance(datos, dict):
-                if cuenta_id:
-                    c_usados = datos.get(cuenta_id, [])
+                cid = (cuenta_id or "").strip()
+                if cid:
+                    c_usados = datos.get(cid, [])
                     return set(str(x) for x in c_usados)
                 else:
-                    todos = set()
-                    for c_lista in datos.values():
-                        if isinstance(c_lista, (list, set)):
-                            todos.update(str(x) for x in c_lista)
-                    return todos
+                    # Sin cuenta especificada: solo los generales/default
+                    return set(str(x) for x in (datos.get("default") or datos.get("principal") or []))
             elif isinstance(datos, list):
                 return set(str(x) for x in datos)
         except Exception:
@@ -275,10 +278,10 @@ def registrar_video_usado(video_id_o_url: str, cuenta_id: Optional[str] = None) 
         pass
 
 
-def descartar_video_para_siempre(video_id_o_url: str) -> None:
+def descartar_video_para_siempre(video_id_o_url: str, cuenta_id: Optional[str] = None) -> None:
     """
-    Registra el video en todas las cuentas de historial_usados.json para que
-    la app nunca más vuelva a seleccionarlo ni subirlo en ninguna cuenta.
+    Registra el video en el historial de la cuenta para no volver a seleccionarlo.
+    Si se especifica cuenta_id, solo se descarta para esa cuenta, sin bloquear a los demás canales.
     """
     vid = video_id_o_url.strip()
     m = re.search(r"(?:shorts/|v=|youtu\.be/)([A-Za-z0-9_-]{11})", vid)
@@ -297,7 +300,8 @@ def descartar_video_para_siempre(video_id_o_url: str) -> None:
         except Exception:
             datos = {}
 
-    claves = set(datos.keys()) | {"default", "principal"}
+    cid = (cuenta_id or "default").strip()
+    claves = [cid]
     for k in claves:
         if k not in datos:
             datos[k] = []

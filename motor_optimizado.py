@@ -655,14 +655,54 @@ def comprobar_actualizacion_repo(raiz_dir: Optional[Union[str, Path]] = None) ->
 def ejecutar_actualizacion_repo(raiz_dir: Optional[Union[str, Path]] = None) -> Tuple[bool, str]:
     """
     Ejecuta git pull origin main para actualizar el código local a la última versión.
+    Limpia de forma segura archivos autogenerados (como guion_video.txt) para evitar conflictos.
     Devuelve (exito, mensaje).
     """
     if raiz_dir is None:
         raiz_dir = Path(__file__).resolve().parent
 
     try:
+        # 1. Restaurar archivos autogenerados o de trabajo que bloquean el pull
+        archivos_generados = ["guion_video.txt"]
+        for arch in archivos_generados:
+            p_arch = Path(raiz_dir) / arch
+            if p_arch.exists():
+                subprocess.run(
+                    ["git", "checkout", "--", arch],
+                    cwd=str(raiz_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    startupinfo=WIN_STARTUPINFO,
+                    creationflags=WIN_NO_WINDOW,
+                )
+
+        # 2. Si todavía hay cambios locales que colisionen, hacer un stash automático
+        stashed = False
+        stat = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(raiz_dir),
+            capture_output=True,
+            text=True,
+            timeout=5,
+            startupinfo=WIN_STARTUPINFO,
+            creationflags=WIN_NO_WINDOW,
+        )
+        if stat.returncode == 0 and stat.stdout.strip():
+            stash_res = subprocess.run(
+                ["git", "stash", "push", "-m", "backup_auto_update"],
+                cwd=str(raiz_dir),
+                capture_output=True,
+                text=True,
+                timeout=10,
+                startupinfo=WIN_STARTUPINFO,
+                creationflags=WIN_NO_WINDOW,
+            )
+            stashed = (stash_res.returncode == 0)
+
+        # 3. Pull limpio desde origin main
         res = subprocess.run(
-            ["git", "pull", "origin", "main"],
+            ["git", "pull", "--no-rebase", "origin", "main"],
             cwd=str(raiz_dir),
             capture_output=True,
             text=True,
@@ -670,6 +710,21 @@ def ejecutar_actualizacion_repo(raiz_dir: Optional[Union[str, Path]] = None) -> 
             startupinfo=WIN_STARTUPINFO,
             creationflags=WIN_NO_WINDOW,
         )
+
+        if stashed:
+            try:
+                subprocess.run(
+                    ["git", "stash", "pop", "--quiet"],
+                    cwd=str(raiz_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    startupinfo=WIN_STARTUPINFO,
+                    creationflags=WIN_NO_WINDOW,
+                )
+            except Exception:
+                pass
+
         if res.returncode == 0:
             out = res.stdout.strip()
             if "Already up to date" in out or "Ya está actualizado" in out:
@@ -818,7 +873,7 @@ def completar_assets_automaticos_en_guion(
     prev_emoji = ""
 
     efectos_ciclo = ["zoom_in", "spotlight", "zoom_out", "alerta_roja", "temblor"]
-    sfx_ciclo = ["whoosh", "riser_suction", "suspense_hit", "vine_boom", "pop"]
+    sfx_ciclo = ["whoosh", "riser_suction", "metal_pipe", "vine_boom", "pop"]
     emojis_ciclo = ["sorprendido", "ojos", "fuego", "cerebro", "risa", "diablo"]
 
     for i, b in enumerate(bloques_parsed):
@@ -860,7 +915,7 @@ def completar_assets_automaticos_en_guion(
             elif any(k in t_n for k in ("risa", "gracioso", "ridiculo", "burla", "karma", "tonto", "payaso", "chiste")):
                 sfx_nuevo = "cartoon_laugh" if prev_sfx != "cartoon_laugh" else "pop"
             elif any(k in t_n for k in ("llora", "triste", "atrapado", "encerrado", "pena", "pobre", "perdido")):
-                sfx_nuevo = "suspense_hit" if prev_sfx != "suspense_hit" else "awww"
+                sfx_nuevo = "heartbeat_fast" if prev_sfx != "heartbeat_fast" else "awww"
             elif any(k in t_n for k in ("miedo", "tension", "corazon", "laberinto", "peligro", "cuidado", "nervios", "pavor")):
                 sfx_nuevo = "heartbeat_fast" if prev_sfx != "heartbeat_fast" else "riser_suction"
             elif any(k in t_n for k in ("foto", "camara", "espejo", "reflejo", "imagen", "brillo")):

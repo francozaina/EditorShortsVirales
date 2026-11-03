@@ -18,7 +18,7 @@ LISTA_EFECTOS = [
 
 LISTA_SFX = [
     "ninguno", "crowd_shocked", "whoosh", "riser_suction", "vine_boom",
-    "metal_pipe", "heartbeat_fast", "record_scratch", "suspense_hit", "ding",
+    "metal_pipe", "heartbeat_fast", "record_scratch", "ding",
     "good_idea", "cash_ting", "punch", "boxing_bell", "camera_flash",
     "camera_shooter", "cartoon_laugh", "kids_yeyy", "party_horn",
     "awww", "error", "xp_Error", "fart", "click", "pop"

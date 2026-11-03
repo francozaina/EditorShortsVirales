@@ -344,6 +344,56 @@ def vincular_nueva_cuenta_interactivo(secret_path: Optional[Path] = None) -> Dic
     return {"id": cid_slug, "nombre": nombre_canal, "channel_id": ch_id, "avatar_path": av_str}
 
 
+def desvincular_cuenta(cuenta_id: str) -> bool:
+    """
+    Elimina una cuenta vinculada de 'indice_cuentas.json' y borra sus archivos de token asociados.
+    """
+    if not cuenta_id:
+        return False
+    cid_s = _sanitizar_id_cuenta(str(cuenta_id).strip())
+    CUENTAS_DIR.mkdir(parents=True, exist_ok=True)
+    idx_file = CUENTAS_DIR / "indice_cuentas.json"
+    eliminado = False
+    if idx_file.exists():
+        try:
+            cuentas = json.loads(idx_file.read_text(encoding="utf-8"))
+            if isinstance(cuentas, list):
+                nuevas = []
+                for c in cuentas:
+                    if str(c.get("id")) == cid_s or str(c.get("id")) == str(cuenta_id) or str(c.get("channel_id")) == str(cuenta_id):
+                        eliminado = True
+                    else:
+                        nuevas.append(c)
+                if eliminado:
+                    idx_file.write_text(json.dumps(nuevas, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+
+    # Eliminar tokens asociados a esta cuenta
+    candidatos_del = list(CUENTAS_DIR.glob(f"token_{cid_s}_*.json"))
+    if cid_s != str(cuenta_id):
+        candidatos_del.extend(list(CUENTAS_DIR.glob(f"token_{cuenta_id}_*.json")))
+    for tok_file in candidatos_del:
+        try:
+            if tok_file.exists():
+                tok_file.unlink()
+        except Exception:
+            pass
+
+    # Eliminar avatar si existe
+    for av_f in [CUENTAS_DIR / f"avatar_{cid_s}.png", CUENTAS_DIR / f"avatar_{cuenta_id}.png"]:
+        try:
+            if av_f.exists():
+                av_f.unlink()
+        except Exception:
+            pass
+
+    # Limpiar caché de suscriptores
+    _CACHE_SUBSCRIBERS_CANAL.pop(cid_s, None)
+    _CACHE_SUBSCRIBERS_CANAL.pop(str(cuenta_id), None)
+    return eliminado
+
+
 def mostrar_guia_configuracion() -> None:
     print("=" * 80)
     print("CONFIGURACION DE YOUTUBE DATA API v3 (Solo se hace 1 vez)")
@@ -396,6 +446,9 @@ def obtener_servicio_youtube(
         candidatos_token.append(CUENTAS_DIR / f"token_{cid}_{api_tag}.json")
         if secret_path_override is None:
             candidatos_token.append(CUENTAS_DIR / f"token_{cid}_api0.json")
+        for f_extra in sorted(CUENTAS_DIR.glob(f"token_{cid}_*.json")):
+            if f_extra not in candidatos_token:
+                candidatos_token.append(f_extra)
     else:
         cuentas = listar_cuentas_vinculadas()
         if cuentas:
