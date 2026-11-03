@@ -3191,7 +3191,8 @@ def iniciar_aplicacion_gui() -> None:
                 c_chid = str(c_it.get("channel_id") or "")
                 c_av = str(c_it.get("avatar_path") or "")
                 n_can = len(canales_por_cuenta.get(c_id, lista_canales if c_id == cid_actual else []))
-                es_activa = (m_sel == "una" and c_id == cid_temp.get())
+                cid_act_real = str(estado_seleccion_cuentas.get("cuenta_id") or cid_temp.get() or "")
+                es_activa = (m_sel == "una" and c_id == cid_act_real)
 
                 item_f = ctk.CTkFrame(
                     lista_scroll,
@@ -3358,18 +3359,7 @@ def iniciar_aplicacion_gui() -> None:
                         except Exception:
                             pass
 
-                    if not es_activa:
-                        ctk.CTkButton(
-                            col_derecha,
-                            text="Elegir",
-                            command=lambda cx=c_id: _marcar_esta(None, cx),
-                            width=55,
-                            height=26,
-                            corner_radius=8,
-                            fg_color=PURPLE_MAIN,
-                            hover_color=PURPLE_HOVER,
-                            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                        ).pack(side="right", padx=(4, 6))
+
                 elif m_sel == "grupo":
                     if c_id not in vars_checks_grupo:
                         vars_checks_grupo[c_id] = tk.BooleanVar(
