@@ -455,6 +455,7 @@ def iniciar_aplicacion_gui() -> None:
     btn_guardar_carpeta: Optional[ctk.CTkButton] = None
     btn_ajustes: Optional[ctk.CTkButton] = None
     solo_guardar_actual = [False]
+    _ts_ultimo_pop_cerrado = [0.0]
 
     # Lista de diccionarios para personalizar cada Reel individualmente (hasta 12 Shorts)
     datos_custom_reels: List[Dict[str, str]] = []
@@ -3018,7 +3019,7 @@ def iniciar_aplicacion_gui() -> None:
     def abrir_selector_cuentas_popup() -> None:
         pop = ctk.CTkToplevel(root)
         pop.title("Elegir Cuenta o Grupo de Subida")
-        pop.geometry("520x580")
+        pop.geometry("560x580")
         pop.resizable(False, False)
         pop.configure(fg_color=BG_DARK)
         pop.transient(root)
@@ -3187,6 +3188,7 @@ def iniciar_aplicacion_gui() -> None:
             for c_it in cuentas_disp:
                 c_id = str(c_it.get("id") or "principal")
                 c_nom = str(c_it.get("nombre") or c_id)
+                c_chid = str(c_it.get("channel_id") or "")
                 c_av = str(c_it.get("avatar_path") or "")
                 n_can = len(canales_por_cuenta.get(c_id, lista_canales if c_id == cid_actual else []))
                 es_activa = (m_sel == "una" and c_id == cid_temp.get())
@@ -3293,7 +3295,7 @@ def iniciar_aplicacion_gui() -> None:
                     col_derecha,
                     text="Desvincular",
                     command=lambda cx=c_id, nomx=c_nom: _desvincular_esta(cx, nomx),
-                    width=75,
+                    width=72,
                     height=26,
                     corner_radius=8,
                     fg_color="#181e2b",
@@ -3303,35 +3305,60 @@ def iniciar_aplicacion_gui() -> None:
                     text_color="#f87171",
                     font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
                 )
-                btn_desv.pack(side="right", padx=(6, 2))
+                btn_desv.pack(side="right", padx=(4, 2))
+
+                def _abrir_en_youtube(chid=c_chid, nom=c_nom) -> None:
+                    import webbrowser
+                    if chid:
+                        url = f"https://www.youtube.com/channel/{chid}"
+                    else:
+                        c_clean = nom.strip()
+                        url = f"https://www.youtube.com/@{c_clean}" if not c_clean.startswith("http") else c_clean
+                    try:
+                        webbrowser.open(url)
+                    except Exception:
+                        pass
+
+                btn_yt = ctk.CTkButton(
+                    col_derecha,
+                    text="Ver en YT ↗",
+                    command=lambda ch=c_chid, nm=c_nom: _abrir_en_youtube(ch, nm),
+                    width=75,
+                    height=26,
+                    corner_radius=8,
+                    fg_color="#182032",
+                    hover_color="#24324f",
+                    border_width=1,
+                    border_color="#2b3b5c",
+                    text_color=CYAN_ACCENT,
+                    font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                )
+                btn_yt.pack(side="right", padx=(4, 4))
 
                 if m_sel == "una":
                     def _marcar_esta(_e=None, cid_x=c_id):
+                        _ts_ultimo_pop_cerrado[0] = time.time()
                         cid_temp.set(cid_x)
                         estado_seleccion_cuentas["modo"] = "una"
                         estado_seleccion_cuentas["cuenta_id"] = cid_x
                         _sincronizar_canales_de_cuenta_activa(cid_x, guardar_previo=True)
                         _aplicar_cambios_inmediatos()
-                        _render_lista_popup()
+                        try:
+                            pop.after(80, pop.destroy)
+                        except Exception:
+                            pass
 
                     partes_clic = [item_f, info_col, lbl_nom, lbl_can]
                     if lbl_av is not None:
                         partes_clic.append(lbl_av)
                     for w_part in partes_clic:
-                        w_part.bind("<Button-1>", lambda _e, cx=c_id: _marcar_esta(_e, cx))
+                        w_part.bind("<ButtonRelease-1>", lambda _e, cx=c_id: _marcar_esta(_e, cx))
                         try:
                             w_part.configure(cursor="hand2")
                         except Exception:
                             pass
 
-                    if es_activa:
-                        ctk.CTkLabel(
-                            col_derecha,
-                            text="✓ Activa",
-                            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-                            text_color=GREEN_ACCENT,
-                        ).pack(side="right", padx=(4, 6))
-                    else:
+                    if not es_activa:
                         ctk.CTkButton(
                             col_derecha,
                             text="Elegir",
@@ -6133,6 +6160,8 @@ def iniciar_aplicacion_gui() -> None:
         ).pack(side="right")
 
     def ejecutar_flujo_1_clic(solo_guardar_override: Optional[bool] = None) -> None:
+        if time.time() - _ts_ultimo_pop_cerrado[0] < 0.4:
+            return
         es_modo_manual_cfg = "Manual" in modo_subida_var.get()
         api_k = "\n".join(obtener_gemini_api_keys()) or obtener_gemini_api_key()
         if not api_k and not es_modo_manual_cfg and not ("Editado" in modo_fuente_var.get()):
