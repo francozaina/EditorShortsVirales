@@ -73,6 +73,8 @@ from motor_optimizado import (
     recortar_silencios_tts,
     realzar_frame_viral,
     generar_plantilla_guion_manual,
+    construir_prompt_argon_con_link,
+    completar_assets_automaticos_en_guion,
     comprobar_actualizacion_repo,
     ejecutar_actualizacion_repo,
 )
@@ -5153,6 +5155,7 @@ def iniciar_aplicacion_gui() -> None:
         url_video_orig: str = "",
         es_modo_manual_inicial: bool = False,
         solo_guardar: bool = False,
+        ruta_video_origen: Optional[Path] = None,
     ) -> None:
         win_r = ctk.CTkToplevel(root)
         win_r.title("Shorts Studio · Edición Manual" if es_modo_manual_inicial else "Shorts Studio · Revisión Previa")
@@ -5189,8 +5192,33 @@ def iniciar_aplicacion_gui() -> None:
 
         win_r.protocol("WM_DELETE_WINDOW", _al_cerrar_x)
 
+        auto_efectos_var = tk.BooleanVar(value=False)
+        auto_sfx_var = tk.BooleanVar(value=False)
+        auto_emojis_var = tk.BooleanVar(value=False)
+        auto_flechas_var = tk.BooleanVar(value=False)
+        auto_circulos_var = tk.BooleanVar(value=False)
+
         def _responder(acc: str) -> None:
             fb = txt_guion_box.get("1.0", "end").strip() if txt_guion_box is not None else ""
+            if acc == "reeditar" and fb:
+                if (
+                    auto_efectos_var.get()
+                    or auto_sfx_var.get()
+                    or auto_emojis_var.get()
+                    or auto_flechas_var.get()
+                    or auto_circulos_var.get()
+                ):
+                    try:
+                        fb = completar_assets_automaticos_en_guion(
+                            fb,
+                            auto_efectos=bool(auto_efectos_var.get()),
+                            auto_sfx=bool(auto_sfx_var.get()),
+                            auto_emojis=bool(auto_emojis_var.get()),
+                            auto_flechas=bool(auto_flechas_var.get()),
+                            auto_circulos=bool(auto_circulos_var.get()),
+                        )
+                    except Exception as e_auto:
+                        print(f"[!] Aviso al autocompletar assets: {e_auto}")
             _limpiar()
             win_r.destroy()
             on_decision(acc, fb)
@@ -5314,56 +5342,100 @@ def iniciar_aplicacion_gui() -> None:
 
         btn_play.configure(command=_toggle_play)
 
-        # Enlace original por debajo del reproductor de video
+        # Enlace original y botón de Prompt para Argon por debajo del reproductor de video
+        outro_like_var = ctk.BooleanVar(value=True)
+        row_url = ctk.CTkFrame(col_izq, fg_color="#101524", corner_radius=10, border_width=1, border_color="#1e2538")
+        row_url.pack(fill="x", padx=16, pady=(0, 6))
+
+        ent_url_disp = ctk.CTkEntry(
+            row_url, height=24,
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            fg_color="transparent", border_width=0,
+            text_color=CYAN_ACCENT,
+            placeholder_text="Pegá acá el link del video...",
+        )
         if url_video_orig and url_video_orig.strip():
-            row_url = ctk.CTkFrame(col_izq, fg_color="#101524", corner_radius=10, border_width=1, border_color="#1e2538")
-            row_url.pack(fill="x", padx=16, pady=(0, 10))
-
-            ent_url_disp = ctk.CTkEntry(
-                row_url, height=24,
-                font=ctk.CTkFont(family="Segoe UI", size=10),
-                fg_color="transparent", border_width=0,
-                text_color=CYAN_ACCENT,
-            )
             ent_url_disp.insert(0, url_video_orig.strip())
-            ent_url_disp.configure(state="readonly")
-            ent_url_disp.pack(side="left", fill="x", expand=True, padx=(8, 2), pady=3)
+        ent_url_disp.pack(side="left", fill="x", expand=True, padx=(8, 2), pady=3)
 
-            def _abrir_url_navegador() -> None:
-                import webbrowser
-                try:
-                    webbrowser.open(url_video_orig.strip())
-                except Exception:
-                    pass
+        def _obtener_url_activa() -> str:
+            u_txt = ent_url_disp.get().strip()
+            return u_txt if u_txt else (url_video_orig.strip() if url_video_orig else "")
 
-            def _copiar_url_clip() -> None:
-                try:
-                    root.clipboard_clear()
-                    root.clipboard_append(url_video_orig.strip())
-                    btn_copiar_url.configure(text="OK!")
-                    root.after(1400, lambda: btn_copiar_url.configure(text="Copiar"))
-                except Exception:
-                    pass
+        def _abrir_url_navegador() -> None:
+            import webbrowser
+            u_act = _obtener_url_activa()
+            if not u_act:
+                return
+            try:
+                webbrowser.open(u_act)
+            except Exception:
+                pass
 
-            ctk.CTkButton(
-                row_url, text="Abrir", width=42, height=22, corner_radius=6,
-                fg_color="#1e2538", hover_color="#2d3752",
-                font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
-                command=_abrir_url_navegador,
-            ).pack(side="right", padx=(2, 4), pady=3)
+        def _copiar_url_clip() -> None:
+            u_act = _obtener_url_activa()
+            if not u_act:
+                return
+            try:
+                root.clipboard_clear()
+                root.clipboard_append(u_act)
+                btn_copiar_url.configure(text="OK!")
+                root.after(1400, lambda: btn_copiar_url.configure(text="Copiar"))
+            except Exception:
+                pass
 
-            btn_copiar_url = ctk.CTkButton(
-                row_url, text="Copiar", width=46, height=22, corner_radius=6,
-                fg_color="#1e2538", hover_color="#2d3752",
-                font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
-                command=_copiar_url_clip,
-            )
-            btn_copiar_url.pack(side="right", padx=(2, 0), pady=3)
+        ctk.CTkButton(
+            row_url, text="Abrir", width=42, height=22, corner_radius=6,
+            fg_color="#1e2538", hover_color="#2d3752",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            command=_abrir_url_navegador,
+        ).pack(side="right", padx=(2, 4), pady=3)
 
+        btn_copiar_url = ctk.CTkButton(
+            row_url, text="Copiar", width=46, height=22, corner_radius=6,
+            fg_color="#1e2538", hover_color="#2d3752",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            command=_copiar_url_clip,
+        )
+        btn_copiar_url.pack(side="right", padx=(2, 0), pady=3)
+
+        def _copiar_prompt_argon() -> None:
+            try:
+                u_act = _obtener_url_activa()
+                bloques_act = getattr(txt_guion_box, "bloques", None) if txt_guion_box is not None else None
+                prompt_str = construir_prompt_argon_con_link(
+                    url_video=u_act,
+                    ruta_video=ruta_video,
+                    bloques_actuales=bloques_act,
+                    incluir_outro_like=bool(outro_like_var.get()),
+                )
+                root.clipboard_clear()
+                root.clipboard_append(prompt_str)
+                btn_prompt_argon.configure(text="✓ Prompt Copiado para Argon", text_color="#10b981")
+                root.after(
+                    1800,
+                    lambda: btn_prompt_argon.configure(text="📋 Copiar Prompt para Argon", text_color=CYAN_ACCENT),
+                )
+            except Exception:
+                pass
+
+        btn_prompt_argon = ctk.CTkButton(
+            col_izq,
+            text="📋 Copiar Prompt para Argon",
+            command=_copiar_prompt_argon,
+            height=28, corner_radius=8,
+            fg_color="#121a2d", hover_color="#1c2947",
+            border_width=1, border_color="#26385e",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=CYAN_ACCENT,
+        )
+        btn_prompt_argon.pack(fill="x", padx=16, pady=(0, 6))
+
+        if url_video_orig and url_video_orig.strip():
             def _descartar_para_siempre() -> None:
                 try:
                     from shorts_engine.youtube_manager import descartar_video_para_siempre
-                    descartar_video_para_siempre(url_video_orig.strip())
+                    descartar_video_para_siempre(_obtener_url_activa())
                 except Exception:
                     pass
                 _responder("descartar")
@@ -5378,7 +5450,7 @@ def iniciar_aplicacion_gui() -> None:
                 font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
                 text_color="#f87171",
             )
-            btn_descartar_perm.pack(fill="x", padx=16, pady=(0, 10))
+            btn_descartar_perm.pack(fill="x", padx=16, pady=(0, 8))
 
         # ── Columna derecha ────────────────────────────────────────────────
         col_der = ctk.CTkFrame(panel_principal, fg_color="transparent")
@@ -5461,6 +5533,33 @@ def iniciar_aplicacion_gui() -> None:
         opt_musica.set("Auto")
         opt_musica.pack(side="left")
 
+        # 3. Interruptor limpio para activar/desactivar la escena final de "Deja tu Like"
+        def _al_cambiar_outro_like() -> None:
+            if txt_guion_box is not None:
+                txt_guion_box.metadatos_ocultos["OUTRO_LIKE"] = "si" if outro_like_var.get() else "no"
+                try:
+                    txt_guion_box._actualizar_raw_interno()
+                except Exception:
+                    pass
+
+        f_outro = ctk.CTkFrame(f_top_ctrls, fg_color="#141a29", corner_radius=8, border_width=1, border_color="#222b40")
+        f_outro.pack(side="left", padx=(10, 0))
+
+        sw_outro_like = ctk.CTkSwitch(
+            f_outro,
+            text="Escena Like",
+            variable=outro_like_var,
+            command=_al_cambiar_outro_like,
+            switch_width=34,
+            switch_height=18,
+            progress_color=PURPLE_MAIN,
+            button_color="#ffffff",
+            button_hover_color="#e2e8f0",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=TEXT_MAIN,
+        )
+        sw_outro_like.pack(padx=8, pady=3)
+
         # Tarjeta guion (ocupa todo el espacio disponible)
         card_guion = ctk.CTkFrame(
             col_der, fg_color=CARD_BG, corner_radius=18,
@@ -5470,14 +5569,75 @@ def iniciar_aplicacion_gui() -> None:
         card_guion.grid_rowconfigure(1, weight=1)
         card_guion.grid_columnconfigure(0, weight=1)
 
+        row_top_guion = ctk.CTkFrame(card_guion, fg_color="transparent")
+        row_top_guion.grid(row=0, column=0, sticky="ew", padx=16, pady=(10, 4))
+
         lbl_guion_tit = ctk.CTkLabel(
-            card_guion,
+            row_top_guion,
             text="Guion editable" if not es_modo_editado else "Metadatos",
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             text_color=TEXT_MAIN,
             anchor="w",
         )
-        lbl_guion_tit.grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
+        lbl_guion_tit.pack(side="left")
+
+        if not es_modo_editado:
+            f_auto_bar = ctk.CTkFrame(row_top_guion, fg_color="#121624", corner_radius=8, border_width=1, border_color="#232b42")
+            f_auto_bar.pack(side="right")
+
+            ctk.CTkLabel(
+                f_auto_bar,
+                text="✨ Auto al renderizar:",
+                font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                text_color="#94a3b8",
+            ).pack(side="left", padx=(8, 4), pady=3)
+
+            def _crear_chip_auto(parent_f, texto_chip: str, var_b: tk.BooleanVar):
+                btn_c = ctk.CTkButton(
+                    parent_f,
+                    text=texto_chip,
+                    width=54,
+                    height=22,
+                    corner_radius=6,
+                    fg_color="#1b2234",
+                    hover_color="#28324e",
+                    border_width=1,
+                    border_color="#2d3753",
+                    font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                    text_color="#94a3b8",
+                )
+
+                def _refrescar_chip():
+                    if var_b.get():
+                        btn_c.configure(
+                            fg_color=PURPLE_MAIN,
+                            hover_color=PURPLE_HOVER,
+                            border_color="#a855f7",
+                            text_color="#ffffff",
+                            text=f"✓ {texto_chip}",
+                        )
+                    else:
+                        btn_c.configure(
+                            fg_color="#1b2234",
+                            hover_color="#28324e",
+                            border_color="#2d3753",
+                            text_color="#94a3b8",
+                            text=texto_chip,
+                        )
+
+                def _toggle_chip():
+                    var_b.set(not var_b.get())
+                    _refrescar_chip()
+
+                btn_c.configure(command=_toggle_chip)
+                btn_c.pack(side="left", padx=2, pady=3)
+                return btn_c
+
+            _crear_chip_auto(f_auto_bar, "Efectos", auto_efectos_var)
+            _crear_chip_auto(f_auto_bar, "SFX", auto_sfx_var)
+            _crear_chip_auto(f_auto_bar, "Emojis", auto_emojis_var)
+            _crear_chip_auto(f_auto_bar, "Flechas", auto_flechas_var)
+            _crear_chip_auto(f_auto_bar, "Círculos", auto_circulos_var)
 
         def _seek_en_reproductor(t_seg: float) -> None:
             if player is not None and duracion_total > 0:
@@ -5548,9 +5708,14 @@ def iniciar_aplicacion_gui() -> None:
             except Exception:
                 pass
 
+        ruta_vid_editor = (
+            ruta_video_origen
+            if (ruta_video_origen is not None and ruta_video_origen.exists())
+            else ruta_video
+        )
         txt_guion_box = VisualScriptEditor(
             card_guion,
-            ruta_video=ruta_video,
+            ruta_video=ruta_vid_editor,
             on_preview_live=_overlay_pos_en_reproductor,
         )
         txt_guion_box.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
@@ -5576,6 +5741,9 @@ def iniciar_aplicacion_gui() -> None:
                 if voz_leida and voz_leida in VOCES_DISPONIBLES:
                     opt_voz.set(voz_leida)
                     voz_var.set(voz_leida)
+
+                outro_leido = txt_guion_box.metadatos_ocultos.get("OUTRO_LIKE", "si").strip().lower()
+                outro_like_var.set(outro_leido not in ("no", "false", "0", "off", "ninguno", "desactivado"))
             except Exception:
                 pass
 
@@ -6450,7 +6618,8 @@ def iniciar_aplicacion_gui() -> None:
                         raise InterruptedError("Operación detenida por el usuario tras guardar la edición.")
 
                     es_modo_manual = ("Manual" in modo_subida_var.get())
-                    if solo_guardar and not es_modo_manual:
+                    es_modo_revision = ("Revisión" in modo_subida_var.get() or "Revision" in modo_subida_var.get())
+                    if solo_guardar and not es_modo_manual and not es_modo_revision:
                         _actualizar_milestone_actual("subido", f"Reel {num_actual}: ✓ Guardado")
                         _set_subprogreso(
                             1.0,
@@ -6459,7 +6628,7 @@ def iniciar_aplicacion_gui() -> None:
                         )
                     else:
                         # Si está activo el Modo Revisión Previa o Edición Manual, esperar la decisión del usuario
-                        if "Revisión" in modo_subida_var.get() or "Revision" in modo_subida_var.get() or es_modo_manual:
+                        if es_modo_revision or es_modo_manual:
                             _actualizar_milestone_actual("activo", f"Reel {num_actual}: {'Editando guion manual...' if es_modo_manual_inicial else 'Esperando tu revisión...'}")
                             root.after(0, lambda: btn_auto_1clic.configure(text="EDITANDO GUION MANUAL..." if es_modo_manual_inicial else "ESPERANDO TU REVISIÓN DEL SHORT..."))
 
@@ -6474,6 +6643,7 @@ def iniciar_aplicacion_gui() -> None:
                                     url_v=str(info_sel.get("url") or info_sel.get("link") or link_directo_var.get().strip() or ""),
                                     es_man_ini=es_modo_manual_inicial,
                                     sg=solo_guardar,
+                                    rv_orig=ruta_video_usar,
                                 ):
                                     try:
                                         abrir_dialogo_revision_short(
@@ -6488,12 +6658,13 @@ def iniciar_aplicacion_gui() -> None:
                                             url_video_orig=url_v,
                                             es_modo_manual_inicial=es_man_ini,
                                             solo_guardar=sg,
+                                            ruta_video_origen=rv_orig,
                                         )
                                     except Exception:
                                         datos_dec.update({"accion": "subir", "feedback": ""})
                                         ev_decision.set()
 
-                                root.after(0, lambda rf=ruta_final, tit=(c_tit if (es_custom_activo and c_tit) else titulo_orig) or ruta_final.stem, url_v=str(info_sel.get("url") or info_sel.get("link") or link_directo_var.get().strip() or ""), es_m=es_modo_manual_inicial, sg=solo_guardar: _mostrar_rev(rf, tit, url_v, es_m, sg))
+                                root.after(0, lambda rf=ruta_final, tit=(c_tit if (es_custom_activo and c_tit) else titulo_orig) or ruta_final.stem, url_v=str(info_sel.get("url") or info_sel.get("link") or link_directo_var.get().strip() or ""), es_m=es_modo_manual_inicial, sg=solo_guardar, rvo=ruta_video_usar: _mostrar_rev(rf, tit, url_v, es_m, sg, rvo))
                                 ev_decision.wait()
 
                                 accion = datos_dec.get("accion", "subir")

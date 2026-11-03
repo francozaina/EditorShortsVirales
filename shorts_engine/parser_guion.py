@@ -203,6 +203,15 @@ def _normalizar_emoji(emoji_raw: Optional[str]) -> Tuple[Optional[str], str]:
     if "+" in raw:
         return raw, "multi"
 
+    es_fijo = False
+    raw_low = raw.lower()
+    if raw_low.startswith("fijo:"):
+        es_fijo = True
+        raw = raw[len("fijo:"):].strip()
+    elif raw_low.startswith("static:"):
+        es_fijo = True
+        raw = raw[len("static:"):].strip()
+
     posicion = "auto"
     if ":" in raw:
         raw, pos_part = raw.split(":", 1)
@@ -211,11 +220,11 @@ def _normalizar_emoji(emoji_raw: Optional[str]) -> Tuple[Optional[str], str]:
 
     e = _quitar_acentos(raw.strip().lower())
     e = e.replace(".png", "").replace(".webp", "").replace(".jpg", "")
-    if e.startswith("fijo:"):
-        e = e[len("fijo:"):]
-        posicion = f"fijo:{posicion}"
     if e.startswith("emoji_"):
         e = e[len("emoji_"):]
+
+    if es_fijo and not posicion.startswith("fijo:"):
+        posicion = f"fijo:{posicion}"
 
     if not e or e in ("ninguno", "ninguna", "none", "no", "false", "-", "flecha", "circulo"):
         return None, posicion
@@ -249,10 +258,7 @@ def _normalizar_objetivo(obj_raw: Optional[str]) -> Tuple[Optional[str], str]:
     """
     Normaliza la especificación de FLECHA o CIRCULO.
     Devuelve (objetivo_normalizado, tamano_modificador).
-    Ejemplo: 'box:[450,560,590,720]@02.4:objeto' -> ('box:[...]', 'chico')
-             'centro:grande' -> ('centro', 'grande')
-             'izquierda'     -> ('izquierda', 'medio')
-             'ninguno'       -> (None, 'medio')
+    Preserva prefijo 'fijo:', escala '*factor', rotación '@grados' y ventana '~ini-fin'.
     """
     if not obj_raw:
         return None, "medio"
@@ -267,9 +273,25 @@ def _normalizar_objetivo(obj_raw: Optional[str]) -> Tuple[Optional[str], str]:
     raw = _quitar_acentos(raw_str.lower())
     raw = raw.replace(".png", "").replace("circulo_rojo", "si").replace("flecha", "si")
 
+    es_fijo = False
+    if raw.startswith("fijo:"):
+        es_fijo = True
+        raw = raw[len("fijo:"):].strip()
+    elif raw.startswith("static:"):
+        es_fijo = True
+        raw = raw[len("static:"):].strip()
+
     tamano = "medio"
+    m_sc = re.search(r"\*(\d+(?:\.\d+)?)", raw)
+    if m_sc:
+        try:
+            sc_v = float(m_sc.group(1))
+            tamano = "chico" if sc_v < 0.82 else ("grande" if sc_v > 1.22 else "medio")
+        except ValueError:
+            pass
+
     if ":" in raw:
-        base_part, mod_part = raw.split(":", 1)
+        base_part, mod_part = raw.rsplit(":", 1)
         mod_clean = mod_part.strip()
         if mod_clean in ("chico", "pequeno", "small", "min"):
             tamano = "chico"
@@ -283,10 +305,11 @@ def _normalizar_objetivo(obj_raw: Optional[str]) -> Tuple[Optional[str], str]:
         else:
             raw = mod_clean
 
-    if not raw or raw in ("ninguno", "ninguna", "none", "no", "false", "-", "0", "centro", "center", "medio", "middle", "auto"):
+    raw_base_check = re.sub(r"(@-?\d+(?:\.\d+)?|\*\d+(?:\.\d+)?|~\d+(?:\.\d+)?-\d+(?:\.\d+)?)", "", raw).strip()
+    if not raw_base_check or raw_base_check in ("ninguno", "ninguna", "none", "no", "false", "-", "0", "centro", "center", "medio", "middle", "auto"):
         return None, tamano
 
-    if raw in ("si", "yes", "true", "1", "activo", "activar", "mismo", "igual"):
+    if raw_base_check in ("si", "yes", "true", "1", "activo", "activar", "mismo", "igual"):
         return "si", tamano
 
     sinonimos_zona = {
@@ -302,7 +325,10 @@ def _normalizar_objetivo(obj_raw: Optional[str]) -> Tuple[Optional[str], str]:
         "automatico": "auto",
         "objetivo": "auto",
     }
-    return sinonimos_zona.get(raw, raw), tamano
+    res_norm = sinonimos_zona.get(raw, raw)
+    if es_fijo and not res_norm.startswith("fijo:"):
+        res_norm = f"fijo:{res_norm}"
+    return res_norm, tamano
 
 
 def cargar_guion_video(ruta_guion: Path) -> ConfigGuion:
@@ -441,6 +467,9 @@ def cargar_guion_video(ruta_guion: Path) -> ConfigGuion:
                         config.duracion_callouts = max(0.5, float(v_str.replace(",", ".")))
                     except ValueError:
                         pass
+                elif k_up in ("OUTRO_LIKE", "ESCENA_LIKE", "DEJAR_LIKE", "INCLUIR_OUTRO_LIKE"):
+                    v_clean = _quitar_acentos(v_str.lower())
+                    config.incluir_outro_like = v_clean not in ("no", "false", "0", "off", "desactivado", "ninguno", "none")
                 elif k_up == "PALABRAS_VERDES":
                     for w in v_str.split(","):
                         if w.strip():

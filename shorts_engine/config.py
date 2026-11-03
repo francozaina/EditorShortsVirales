@@ -169,6 +169,7 @@ class ConfigGuion:
     volumen_musica: float = VOLUMEN_MUSICA_FONDO
     tono_video: str = "fondo"
     duracion_callouts: float = DURACION_CALLOUTS_DEFAULT
+    incluir_outro_like: bool = True
     palabras_verdes_extra: Set[str] = field(default_factory=set)
     palabras_rojas_extra: Set[str] = field(default_factory=set)
     palabras_cian_extra: Set[str] = field(default_factory=set)

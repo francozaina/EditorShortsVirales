@@ -2,6 +2,11 @@
 import re
 import customtkinter as ctk
 from typing import List, Dict, Callable, Optional, Any
+from motor_optimizado import (
+    recortar_frame_916_pil,
+    parsear_directiva_asset_manual,
+    formatear_directiva_asset_manual,
+)
 
 # =====================================================================
 # CATÁLOGO OFICIAL Y 9 CUADRANTES PRECISOS DEL MOTOR
@@ -104,7 +109,7 @@ def _extraer_frame_pil(ruta_video, t_seg: float, w: int = 270, h: int = 480):
         if not ret or frame_bgr is None:
             return None
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        return Image.fromarray(frame_rgb).resize((w, h), Image.Resampling.LANCZOS)
+        return recortar_frame_916_pil(frame_rgb, w, h)
     except Exception:
         return None
 
@@ -124,8 +129,8 @@ def abrir_dialogo_posicion_pantalla(
 
     win_p = ctk.CTkToplevel(parent_win)
     win_p.title("Editor de Flechas, Círculos y Emojis")
-    win_p.geometry("380x820")
-    win_p.minsize(360, 720)
+    win_p.geometry("380x865")
+    win_p.minsize(360, 760)
     win_p.resizable(False, True)
     win_p.configure(fg_color="#0e111a")
     win_p.transient(parent_win)
@@ -135,6 +140,7 @@ def abrir_dialogo_posicion_pantalla(
     t_fin = float(datos_bloque.get("t_fin", 4.0))
     if t_fin <= t_ini:
         t_fin = t_ini + 3.0
+    dur_bloque = max(0.2, round(t_fin - t_ini, 2))
     t_actual = t_ini
 
     CW, CH = 270, 480
@@ -183,59 +189,60 @@ def abrir_dialogo_posicion_pantalla(
                 pass
 
     class SpriteItem:
-        def __init__(self, tipo: str, nombre: str, x: float, y: float, scale: float = 1.0, rot: float = 0.0, tracking: bool = True):
+        def __init__(
+            self,
+            tipo: str,
+            nombre: str,
+            x: float,
+            y: float,
+            scale: float = 1.0,
+            rot: float = 0.0,
+            tracking: bool = False,
+            t_ini_rel: float = 0.0,
+            t_fin_rel: Optional[float] = None,
+        ):
             self.tipo = str(tipo)
             self.nombre = str(nombre)
-            self.x = max(5.0, min(95.0, float(x)))
-            self.y = max(5.0, min(95.0, float(y)))
-            self.scale = max(0.4, min(2.5, float(scale)))
+            self.x = max(3.0, min(97.0, float(x)))
+            self.y = max(3.0, min(97.0, float(y)))
+            self.scale = max(0.35, min(2.8, float(scale)))
             self.rot = float(rot) % 360.0
             self.tracking = bool(tracking)
+            t_ini_val = 0.0 if t_ini_rel is None else float(t_ini_rel)
+            self.t_ini_rel = max(0.0, min(dur_bloque - 0.1, t_ini_val))
+            fin_def = dur_bloque if t_fin_rel is None else float(t_fin_rel)
+            self.t_fin_rel = max(self.t_ini_rel + 0.1, min(dur_bloque, fin_def))
 
     sprites: List[SpriteItem] = []
     selected_sprite: Optional[SpriteItem] = None
 
-    pos_keyword_map = {
-        "derecha": (78.0, 32.0),
-        "izquierda": (22.0, 32.0),
-        "centro": (50.0, 45.0),
-        "arriba": (50.0, 20.0),
-        "abajo": (50.0, 80.0),
-        "arriba_der": (78.0, 20.0),
-        "arriba_izq": (22.0, 20.0),
-        "abajo_der": (78.0, 80.0),
-        "abajo_izq": (22.0, 80.0),
-        "auto": (78.0, 32.0),
-    }
-
     # 1. Círculo existente
     c_raw = str(datos_bloque.get("circulo", "")).strip()
-    if c_raw and c_raw.lower() not in ("ninguno", "ninguna", "none", "no"):
-        is_track = "fijo:" not in c_raw.lower() and "static:" not in c_raw.lower()
-        c_clean = c_raw.lower().replace("fijo:", "").replace("static:", "").strip()
-        sc = 1.3 if ":grande" in c_clean else (0.7 if ":chico" in c_clean else 1.0)
-        m_c = re.search(r"(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", c_clean)
-        if m_c:
-            cx, cy = float(m_c.group(1)), float(m_c.group(2))
-        else:
-            k = c_clean.split(":")[0].strip()
-            cx, cy = pos_keyword_map.get(k, (50.0, 45.0))
-        sprites.append(SpriteItem("circulo", "circulo", cx, cy, scale=sc, rot=0.0, tracking=is_track))
+    meta_c = parsear_directiva_asset_manual(c_raw, "circulo", 0.0, dur_bloque)
+    if meta_c["activo"]:
+        sprites.append(
+            SpriteItem(
+                "circulo", "circulo",
+                meta_c["x"], meta_c["y"],
+                scale=meta_c["scale"], rot=0.0,
+                tracking=meta_c["tracking"],
+                t_ini_rel=meta_c["t_ini_rel"], t_fin_rel=meta_c["t_fin_rel"],
+            )
+        )
 
     # 2. Flecha existente
     f_raw = str(datos_bloque.get("flecha", "")).strip()
-    if f_raw and f_raw.lower() not in ("ninguno", "ninguna", "none", "no"):
-        is_track = "fijo:" not in f_raw.lower() and "static:" not in f_raw.lower()
-        f_clean = f_raw.lower().replace("fijo:", "").replace("static:", "").strip()
-        m_rot = re.search(r"@(\d+(?:\.\d+)?)", f_clean)
-        rot_val = float(m_rot.group(1)) if m_rot else 315.0
-        m_f = re.search(r"(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", f_clean)
-        if m_f:
-            fx, fy = float(m_f.group(1)), float(m_f.group(2))
-        else:
-            k = f_clean.split("@")[0].strip()
-            fx, fy = pos_keyword_map.get(k, (50.0, 50.0))
-        sprites.append(SpriteItem("flecha", "flecha", fx, fy, scale=1.0, rot=rot_val, tracking=is_track))
+    meta_f = parsear_directiva_asset_manual(f_raw, "flecha", 0.0, dur_bloque)
+    if meta_f["activo"]:
+        sprites.append(
+            SpriteItem(
+                "flecha", "flecha",
+                meta_f["x"], meta_f["y"],
+                scale=meta_f["scale"], rot=meta_f["rot"],
+                tracking=meta_f["tracking"],
+                t_ini_rel=meta_f["t_ini_rel"], t_fin_rel=meta_f["t_fin_rel"],
+            )
+        )
 
     # 3. Emojis existentes (múltiples con +)
     e_raw = str(datos_bloque.get("emoji", "")).strip()
@@ -245,24 +252,20 @@ def abrir_dialogo_posicion_pantalla(
             p = p.strip()
             if not p or p.lower() in ("ninguno", "ninguna", "none", "no"):
                 continue
-            is_track = "fijo:" not in p.lower() and "static:" not in p.lower()
-            p_clean = p.replace("fijo:", "").replace("static:", "").strip()
-            m_rot = re.search(r"@(\d+(?:\.\d+)?)", p_clean)
-            rot_val = float(m_rot.group(1)) if m_rot else 0.0
-            p_nom_pos = p_clean.split("@")[0].strip()
-            if ":" in p_nom_pos:
-                nom_e, pos_e = p_nom_pos.split(":", 1)
-            else:
-                nom_e, pos_e = p_nom_pos, "derecha"
-            nom_clean = _quitar_acentos(nom_e.strip().lower())
-            if nom_clean.startswith("emoji_"):
-                nom_clean = nom_clean[6:]
-            m_e = re.search(r"(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", pos_e)
-            if m_e:
-                ex, ey = float(m_e.group(1)), float(m_e.group(2))
-            else:
-                ex, ey = pos_keyword_map.get(pos_e.strip().lower(), (78.0, 32.0))
-            sprites.append(SpriteItem("emoji", nom_clean, ex, ey, scale=1.0, rot=rot_val, tracking=is_track))
+            meta_e = parsear_directiva_asset_manual(p, "emoji", 0.0, dur_bloque)
+            if meta_e["activo"]:
+                nom_clean = _quitar_acentos(meta_e["nombre"].strip().lower())
+                if nom_clean.startswith("emoji_"):
+                    nom_clean = nom_clean[6:]
+                sprites.append(
+                    SpriteItem(
+                        "emoji", nom_clean,
+                        meta_e["x"], meta_e["y"],
+                        scale=meta_e["scale"], rot=meta_e["rot"],
+                        tracking=meta_e["tracking"],
+                        t_ini_rel=meta_e["t_ini_rel"], t_fin_rel=meta_e["t_fin_rel"],
+                    )
+                )
 
     if sprites:
         selected_sprite = sprites[0]
@@ -291,28 +294,34 @@ def abrir_dialogo_posicion_pantalla(
         canvas.create_line(0, CH * 0.66, CW, CH * 0.66, fill=dash_col, dash=(2, 3))
 
         # Sprites
+        t_rel_actual = max(0.0, t_actual - t_ini)
         for s in sprites:
             base_img = None
-            base_sz = 62
+            base_sz = 50
             if s.tipo == "flecha":
                 base_img = assets_pil.get("flecha")
-                base_sz = 60
+                base_sz = 72
             elif s.tipo == "circulo":
                 base_img = assets_pil.get("circulo")
-                base_sz = 68
+                base_sz = 88
             elif s.tipo == "emoji":
                 base_img = assets_pil.get(s.nombre, assets_pil.get("sorprendido"))
-                base_sz = 62
+                base_sz = 50
 
             cx = int(round((s.x / 100.0) * CW))
             cy = int(round((s.y / 100.0) * CH))
             dim = max(24, int(round(base_sz * s.scale)))
+            visible_en_t = (s.t_ini_rel - 0.05) <= t_rel_actual <= (s.t_fin_rel + 0.05)
 
             if base_img is not None:
                 try:
                     img_scaled = base_img.resize((dim, dim), Image.Resampling.BILINEAR)
                     if abs(s.rot) > 0.5:
-                        img_scaled = img_scaled.rotate(-s.rot, resample=Image.Resampling.BICUBIC, expand=True)
+                        img_scaled = img_scaled.rotate(-s.rot, resample=Image.Resampling.BICUBIC, expand=False)
+                    if not visible_en_t:
+                        r_c, g_c, b_c, a_c = img_scaled.split()
+                        a_c = a_c.point(lambda p: int(p * 0.35))
+                        img_scaled = Image.merge("RGBA", (r_c, g_c, b_c, a_c))
                     photo = ImageTk.PhotoImage(img_scaled)
                     cached_photos.append(photo)
                     canvas.create_image(cx, cy, image=photo, anchor="center")
@@ -364,7 +373,7 @@ def abrir_dialogo_posicion_pantalla(
         if selected_sprite is not None:
             cx = (selected_sprite.x / 100.0) * CW
             cy = (selected_sprite.y / 100.0) * CH
-            base_sz = 68 if selected_sprite.tipo == "circulo" else 62
+            base_sz = 88 if selected_sprite.tipo == "circulo" else (72 if selected_sprite.tipo == "flecha" else 50)
             dim = max(24, int(round(base_sz * selected_sprite.scale)))
             hw = max(14, int(round(dim * 0.5)))
             hh = max(14, int(round(dim * 0.5)))
@@ -391,7 +400,7 @@ def abrir_dialogo_posicion_pantalla(
         for s in reversed(sprites):
             scx = (s.x / 100.0) * CW
             scy = (s.y / 100.0) * CH
-            base_sz = 68 if s.tipo == "circulo" else 62
+            base_sz = 88 if s.tipo == "circulo" else (72 if s.tipo == "flecha" else 50)
             dim = max(24, int(round(base_sz * s.scale)))
             hw = max(14, int(round(dim * 0.5)))
             hh = max(14, int(round(dim * 0.5)))
@@ -494,9 +503,14 @@ def abrir_dialogo_posicion_pantalla(
         if f_exist:
             sprites.remove(f_exist)
             if selected_sprite == f_exist:
-                selected_sprite = None
+                selected_sprite = sprites[0] if sprites else None
         else:
-            sp = SpriteItem("flecha", "flecha", 50.0, 50.0, scale=1.0, rot=315.0, tracking=True)
+            t_ini_r = round(max(0.0, min(dur_bloque - 0.3, t_actual - t_ini)), 2) if (t_actual - t_ini) > 0.15 else 0.0
+            sp = SpriteItem(
+                "flecha", "flecha", 50.0, 50.0,
+                scale=1.0, rot=315.0, tracking=False,
+                t_ini_rel=t_ini_r, t_fin_rel=dur_bloque,
+            )
             sprites.append(sp)
             selected_sprite = sp
         _actualizar_panel_seleccion()
@@ -509,9 +523,14 @@ def abrir_dialogo_posicion_pantalla(
         if c_exist:
             sprites.remove(c_exist)
             if selected_sprite == c_exist:
-                selected_sprite = None
+                selected_sprite = sprites[0] if sprites else None
         else:
-            sp = SpriteItem("circulo", "circulo", 50.0, 45.0, scale=1.0, rot=0.0, tracking=True)
+            t_ini_r = round(max(0.0, min(dur_bloque - 0.3, t_actual - t_ini)), 2) if (t_actual - t_ini) > 0.15 else 0.0
+            sp = SpriteItem(
+                "circulo", "circulo", 50.0, 45.0,
+                scale=1.0, rot=0.0, tracking=False,
+                t_ini_rel=t_ini_r, t_fin_rel=dur_bloque,
+            )
             sprites.append(sp)
             selected_sprite = sp
         _actualizar_panel_seleccion()
@@ -567,10 +586,20 @@ def abrir_dialogo_posicion_pantalla(
 
     def _agregar_emoji(nom_em: str):
         nonlocal selected_sprite
+        if selected_sprite is not None and selected_sprite.tipo == "emoji":
+            selected_sprite.nombre = nom_em
+            _actualizar_panel_seleccion()
+            _redibujar()
+            return
         n_existentes = len([s for s in sprites if s.tipo == "emoji"])
         offset_x = (n_existentes % 4) * 8.0
         offset_y = (n_existentes % 4) * 6.0
-        sp = SpriteItem("emoji", nom_em, 76.0 - offset_x, 30.0 + offset_y, scale=1.0, rot=0.0, tracking=True)
+        t_ini_r = round(max(0.0, min(dur_bloque - 0.3, t_actual - t_ini)), 2) if (t_actual - t_ini) > 0.15 else 0.0
+        sp = SpriteItem(
+            "emoji", nom_em, 76.0 - offset_x, 30.0 + offset_y,
+            scale=1.0, rot=0.0, tracking=False,
+            t_ini_rel=t_ini_r, t_fin_rel=dur_bloque,
+        )
         sprites.append(sp)
         selected_sprite = sp
         _actualizar_panel_seleccion()
@@ -631,13 +660,105 @@ def abrir_dialogo_posicion_pantalla(
     )
     btn_quitar.pack(side="right", padx=4, pady=4)
 
+    # Barra limpia de Tiempo del Asset seleccionado (Aparece / Duración / Desaparece)
+    f_timing = ctk.CTkFrame(win_p, fg_color="#121623", corner_radius=8, border_width=1, border_color="#1f273b")
+    f_timing.pack(fill="x", padx=16, pady=(1, 3))
+
+    ctk.CTkLabel(
+        f_timing, text="⏱", font=ctk.CTkFont(size=11, weight="bold"), text_color="#38bdf8"
+    ).pack(side="left", padx=(7, 3), pady=4)
+
+    ctk.CTkLabel(
+        f_timing, text="Ini:", font=ctk.CTkFont(size=10, weight="bold"), text_color="#94a3b8"
+    ).pack(side="left", padx=(2, 2))
+    ent_ap = ctk.CTkEntry(
+        f_timing, width=44, height=23, justify="center",
+        font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+        fg_color="#0e111a", border_color="#2a344c"
+    )
+    ent_ap.pack(side="left", padx=(0, 4), pady=4)
+
+    ctk.CTkLabel(
+        f_timing, text="Dur:", font=ctk.CTkFont(size=10, weight="bold"), text_color="#94a3b8"
+    ).pack(side="left", padx=(2, 2))
+    ent_dur = ctk.CTkEntry(
+        f_timing, width=44, height=23, justify="center",
+        font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+        fg_color="#0e111a", border_color="#2a344c"
+    )
+    ent_dur.pack(side="left", padx=(0, 4), pady=4)
+
+    ctk.CTkLabel(
+        f_timing, text="Fin:", font=ctk.CTkFont(size=10, weight="bold"), text_color="#94a3b8"
+    ).pack(side="left", padx=(2, 2))
+    ent_des = ctk.CTkEntry(
+        f_timing, width=44, height=23, justify="center",
+        font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+        fg_color="#0e111a", border_color="#2a344c"
+    )
+    ent_des.pack(side="left", padx=(0, 4), pady=4)
+
+    def _fijar_ini_actual():
+        if selected_sprite is None:
+            return
+        rel_cur = max(0.0, min(dur_bloque - 0.1, round(t_actual - t_ini, 2)))
+        dur_prev = max(0.2, selected_sprite.t_fin_rel - selected_sprite.t_ini_rel)
+        selected_sprite.t_ini_rel = rel_cur
+        selected_sprite.t_fin_rel = min(dur_bloque, round(rel_cur + dur_prev, 2))
+        _actualizar_panel_seleccion()
+        _redibujar()
+
+    btn_t_now = ctk.CTkButton(
+        f_timing, text="Actual", width=48, height=22, corner_radius=5,
+        fg_color="#1e293b", hover_color="#334155", text_color="#38bdf8",
+        font=ctk.CTkFont(size=10, weight="bold"), command=_fijar_ini_actual
+    )
+    btn_t_now.pack(side="right", padx=(2, 6), pady=4)
+
+    def _aplicar_timing_entries(modo_cambio: str):
+        if selected_sprite is None:
+            return
+        try:
+            v_ap = float(ent_ap.get().replace("s", "").strip())
+            v_dur = float(ent_dur.get().replace("s", "").strip())
+            v_des = float(ent_des.get().replace("s", "").strip())
+        except Exception:
+            return
+        # Soportar tanto segundo absoluto del video (t_ini..t_fin) como relativo (0..dur_bloque)
+        if v_ap >= t_ini - 0.05 and t_ini > 0.0:
+            rel_ini = v_ap - t_ini
+        else:
+            rel_ini = v_ap
+        rel_ini = max(0.0, min(dur_bloque - 0.1, rel_ini))
+
+        if modo_cambio == "fin":
+            if v_des >= t_ini and t_ini > 0.0:
+                rel_fin = v_des - t_ini
+            else:
+                rel_fin = v_des
+            rel_fin = max(rel_ini + 0.1, min(dur_bloque, rel_fin))
+        else:
+            dur_c = max(0.1, min(dur_bloque - rel_ini, v_dur))
+            rel_fin = min(dur_bloque, rel_ini + dur_c)
+
+        selected_sprite.t_ini_rel = round(rel_ini, 2)
+        selected_sprite.t_fin_rel = round(rel_fin, 2)
+        _actualizar_panel_seleccion()
+        _redibujar()
+
+    ent_ap.bind("<Return>", lambda _: _aplicar_timing_entries("ini"))
+    ent_ap.bind("<FocusOut>", lambda _: _aplicar_timing_entries("ini"))
+    ent_dur.bind("<Return>", lambda _: _aplicar_timing_entries("dur"))
+    ent_dur.bind("<FocusOut>", lambda _: _aplicar_timing_entries("dur"))
+    ent_des.bind("<Return>", lambda _: _aplicar_timing_entries("fin"))
+    ent_des.bind("<FocusOut>", lambda _: _aplicar_timing_entries("fin"))
+
     def _actualizar_panel_seleccion():
         if selected_sprite is not None:
             nom_dsp = selected_sprite.nombre.title()
+            texto_sel = f"🎯 {nom_dsp} | Tam: {int(round(selected_sprite.scale * 100))}%"
             if selected_sprite.tipo == "flecha" or abs(selected_sprite.rot) > 1.0:
-                texto_sel = f"🎯 {nom_dsp} | Giro: {selected_sprite.rot:.0f}°"
-            else:
-                texto_sel = f"🎯 {nom_dsp}"
+                texto_sel += f" | {selected_sprite.rot:.0f}°"
             lbl_sel_info.configure(
                 text=texto_sel,
                 text_color="#38bdf8"
@@ -645,13 +766,30 @@ def abrir_dialogo_posicion_pantalla(
             var_tracking.set(selected_sprite.tracking)
             chk_tracking.configure(state="normal")
             btn_quitar.configure(state="normal")
+            for w_e in (ent_ap, ent_dur, ent_des, btn_t_now):
+                w_e.configure(state="normal")
+            abs_ini = t_ini + selected_sprite.t_ini_rel
+            abs_fin = t_ini + selected_sprite.t_fin_rel
+            dur_sp = max(0.1, abs_fin - abs_ini)
+            ent_ap.delete(0, "end")
+            ent_ap.insert(0, f"{abs_ini:.1f}")
+            ent_dur.delete(0, "end")
+            ent_dur.insert(0, f"{dur_sp:.1f}")
+            ent_des.delete(0, "end")
+            ent_des.insert(0, f"{abs_fin:.1f}")
         else:
             lbl_sel_info.configure(
-                text="Toca un elemento para mover o girar",
+                text="Toca un elemento para mover, escalar o girar",
                 text_color="#64748b"
             )
             chk_tracking.configure(state="disabled")
             btn_quitar.configure(state="disabled")
+            for w_e in (ent_ap, ent_dur, ent_des):
+                w_e.configure(state="normal")
+                w_e.delete(0, "end")
+                w_e.insert(0, "-")
+                w_e.configure(state="disabled")
+            btn_t_now.configure(state="disabled")
 
     _actualizar_cuadrillas()
     _actualizar_panel_seleccion()
@@ -666,19 +804,23 @@ def abrir_dialogo_posicion_pantalla(
         win_p.destroy()
 
     def _guardar_y_cerrar():
+        if selected_sprite is not None:
+            _aplicar_timing_entries("dur")
         c_s = next((s for s in sprites if s.tipo == "circulo"), None)
         if c_s:
-            tam = "chico" if c_s.scale < 0.8 else ("grande" if c_s.scale > 1.3 else "medio")
-            pref = "" if c_s.tracking else "fijo:"
-            res_circulo = f"{pref}{c_s.x:.1f},{c_s.y:.1f}:{tam}"
+            res_circulo = formatear_directiva_asset_manual(
+                "circulo", "circulo", c_s.x, c_s.y, c_s.scale, 0.0, c_s.tracking,
+                c_s.t_ini_rel, c_s.t_fin_rel, dur_bloque
+            )
         else:
             res_circulo = "ninguno"
 
         f_s = next((s for s in sprites if s.tipo == "flecha"), None)
         if f_s:
-            pref = "" if f_s.tracking else "fijo:"
-            rot_int = int(round(f_s.rot)) % 360
-            res_flecha = f"{pref}{f_s.x:.1f},{f_s.y:.1f}@{rot_int}"
+            res_flecha = formatear_directiva_asset_manual(
+                "flecha", "flecha", f_s.x, f_s.y, f_s.scale, f_s.rot, f_s.tracking,
+                f_s.t_ini_rel, f_s.t_fin_rel, dur_bloque
+            )
         else:
             res_flecha = "ninguna"
 
@@ -686,9 +828,12 @@ def abrir_dialogo_posicion_pantalla(
         if e_s_list:
             parts = []
             for s in e_s_list:
-                pref = "" if s.tracking else "fijo:"
-                rot_str = f"@{int(round(s.rot)) % 360}" if abs(s.rot) > 1 else ""
-                parts.append(f"{pref}{s.nombre}:{s.x:.1f},{s.y:.1f}{rot_str}")
+                parts.append(
+                    formatear_directiva_asset_manual(
+                        "emoji", s.nombre, s.x, s.y, s.scale, s.rot, s.tracking,
+                        s.t_ini_rel, s.t_fin_rel, dur_bloque
+                    )
+                )
             res_emoji = "+".join(parts)
         else:
             res_emoji = "ninguno"
@@ -905,12 +1050,14 @@ class BloqueGuionCard(ctk.CTkFrame):
             text="Flechas/Círculos",
             command=self._abrir_selector_posicion,
             height=24,
-            width=108,
+            width=116,
             fg_color="#1d4ed8",
             hover_color="#1e40af",
             font=ctk.CTkFont(size=11, weight="bold"),
         )
         btn_pos.pack()
+        self.btn_pos = btn_pos
+        self._actualizar_texto_btn_posicion()
 
         # Botón Altura Texto a la derecha en la misma línea
         f_btn_alt = ctk.CTkFrame(row_assets_1, fg_color="transparent")
@@ -921,12 +1068,83 @@ class BloqueGuionCard(ctk.CTkFrame):
             text="📏 Altura Texto",
             command=self._toggle_frame_altura,
             height=24,
-            width=95,
+            width=92,
             fg_color="#1e2436",
             hover_color="#2d354d",
             font=ctk.CTkFont(size=11, weight="bold"),
         )
         self.btn_alt_toggle.pack()
+
+        # Botón Tiempo Assets a la derecha en la misma línea (diseño limpio e integrado)
+        f_btn_tas = ctk.CTkFrame(row_assets_1, fg_color="transparent")
+        f_btn_tas.pack(side="left", padx=3, pady=2)
+        ctk.CTkLabel(f_btn_tas, text="", font=ctk.CTkFont(size=10)).pack(anchor="w")
+        self.btn_tiempo_assets_toggle = ctk.CTkButton(
+            f_btn_tas,
+            text="⏱ Tiempo Assets",
+            command=self._toggle_frame_tiempo_assets,
+            height=24,
+            width=102,
+            fg_color="#1e2436",
+            hover_color="#2d354d",
+            font=ctk.CTkFont(size=11, weight="bold"),
+        )
+        self.btn_tiempo_assets_toggle.pack()
+
+        # Fila de Tiempo de Assets (oculta por defecto, se despliega con '⏱ Tiempo Assets')
+        self.frame_tiempo_assets = ctk.CTkFrame(self.assets_frame, fg_color="#121623", corner_radius=6)
+        self._tiempo_assets_visible = False
+
+        ctk.CTkLabel(
+            self.frame_tiempo_assets,
+            text="⏱ Assets  Aparece (s):",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#94a3b8",
+        ).pack(side="left", padx=(8, 4), pady=4)
+
+        self.ent_asset_ini = ctk.CTkEntry(
+            self.frame_tiempo_assets, width=48, height=23, justify="center",
+            font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+            fg_color="#0e111a", border_color="#2a344c"
+        )
+        self.ent_asset_ini.pack(side="left", padx=(0, 6), pady=4)
+
+        ctk.CTkLabel(
+            self.frame_tiempo_assets,
+            text="Duración (s):",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#94a3b8",
+        ).pack(side="left", padx=(2, 4), pady=4)
+
+        self.ent_asset_dur = ctk.CTkEntry(
+            self.frame_tiempo_assets, width=48, height=23, justify="center",
+            font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+            fg_color="#0e111a", border_color="#2a344c"
+        )
+        self.ent_asset_dur.pack(side="left", padx=(0, 6), pady=4)
+
+        ctk.CTkLabel(
+            self.frame_tiempo_assets,
+            text="Desaparece (s):",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#94a3b8",
+        ).pack(side="left", padx=(2, 4), pady=4)
+
+        self.ent_asset_fin = ctk.CTkEntry(
+            self.frame_tiempo_assets, width=48, height=23, justify="center",
+            font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+            fg_color="#0e111a", border_color="#2a344c"
+        )
+        self.ent_asset_fin.pack(side="left", padx=(0, 8), pady=4)
+
+        self._refrescar_inputs_tiempo_assets()
+
+        self.ent_asset_ini.bind("<Return>", lambda _: self._aplicar_tiempo_assets_card("ini"))
+        self.ent_asset_ini.bind("<FocusOut>", lambda _: self._aplicar_tiempo_assets_card("ini"))
+        self.ent_asset_dur.bind("<Return>", lambda _: self._aplicar_tiempo_assets_card("dur"))
+        self.ent_asset_dur.bind("<FocusOut>", lambda _: self._aplicar_tiempo_assets_card("dur"))
+        self.ent_asset_fin.bind("<Return>", lambda _: self._aplicar_tiempo_assets_card("fin"))
+        self.ent_asset_fin.bind("<FocusOut>", lambda _: self._aplicar_tiempo_assets_card("fin"))
 
         # Fila de Altura de Texto (oculta por defecto, se despliega con '📏 Altura Texto')
         self.frame_altura = ctk.CTkFrame(self.assets_frame, fg_color="#121623", corner_radius=6)
@@ -983,11 +1201,125 @@ class BloqueGuionCard(ctk.CTkFrame):
             if hasattr(self, "btn_alt_toggle") and self.btn_alt_toggle.winfo_exists():
                 self.btn_alt_toggle.configure(fg_color="#334155")
 
+    def _refrescar_inputs_tiempo_assets(self):
+        if not hasattr(self, "ent_asset_ini"):
+            return
+        t_i = float(self.datos.get("t_ini", 0.0))
+        t_f = max(t_i + 0.2, float(self.datos.get("t_fin", t_i + 4.0)))
+        dur_b = max(0.2, round(t_f - t_i, 2))
+        rel_ini, rel_fin = 0.0, dur_b
+        for k_t, t_tipo in (("circulo", "circulo"), ("flecha", "flecha"), ("emoji", "emoji")):
+            raw_v = str(self.datos.get(k_t, "")).strip()
+            if raw_v and raw_v.lower() not in ("ninguno", "ninguna", "none", "no"):
+                first_part = raw_v.split("+")[0].strip()
+                m_info = parsear_directiva_asset_manual(first_part, t_tipo, 0.0, dur_b)
+                if m_info["activo"]:
+                    rel_ini = m_info["t_ini_rel"]
+                    rel_fin = m_info["t_fin_rel"]
+                    break
+        abs_ini = t_i + rel_ini
+        abs_fin = t_i + rel_fin
+        dur_a = max(0.1, abs_fin - abs_ini)
+        for ent_w, val_f in ((self.ent_asset_ini, abs_ini), (self.ent_asset_dur, dur_a), (self.ent_asset_fin, abs_fin)):
+            ent_w.delete(0, "end")
+            ent_w.insert(0, f"{val_f:.1f}")
+
+    def _aplicar_tiempo_assets_card(self, modo_cambio: str):
+        if not hasattr(self, "ent_asset_ini"):
+            return
+        t_i = float(self.datos.get("t_ini", 0.0))
+        t_f = max(t_i + 0.2, float(self.datos.get("t_fin", t_i + 4.0)))
+        dur_b = max(0.2, round(t_f - t_i, 2))
+        try:
+            v_ap = float(self.ent_asset_ini.get().replace("s", "").strip())
+            v_dur = float(self.ent_asset_dur.get().replace("s", "").strip())
+            v_des = float(self.ent_asset_fin.get().replace("s", "").strip())
+        except Exception:
+            self._refrescar_inputs_tiempo_assets()
+            return
+
+        rel_ini = (v_ap - t_i) if (v_ap >= t_i - 0.05 and t_i > 0.0) else v_ap
+        rel_ini = max(0.0, min(dur_b - 0.1, rel_ini))
+        if modo_cambio == "fin":
+            rel_fin = (v_des - t_i) if (v_des >= t_i and t_i > 0.0) else v_des
+            rel_fin = max(rel_ini + 0.1, min(dur_b, rel_fin))
+        else:
+            dur_c = max(0.1, min(dur_b - rel_ini, v_dur))
+            rel_fin = min(dur_b, rel_ini + dur_c)
+
+        rel_ini = round(rel_ini, 2)
+        rel_fin = round(rel_fin, 2)
+
+        for k_t, t_tipo in (("circulo", "circulo"), ("flecha", "flecha")):
+            raw_v = str(self.datos.get(k_t, "")).strip()
+            m_info = parsear_directiva_asset_manual(raw_v, t_tipo, 0.0, dur_b)
+            if m_info["activo"]:
+                self.datos[k_t] = formatear_directiva_asset_manual(
+                    t_tipo, m_info["nombre"], m_info["x"], m_info["y"],
+                    m_info["scale"], m_info["rot"], m_info["tracking"],
+                    rel_ini, rel_fin, dur_b,
+                )
+
+        raw_em = str(self.datos.get("emoji", "")).strip()
+        if raw_em and raw_em.lower() not in ("ninguno", "ninguna", "none", "no"):
+            partes_em = []
+            for p_e in raw_em.split("+"):
+                m_e = parsear_directiva_asset_manual(p_e.strip(), "emoji", 0.0, dur_b)
+                if m_e["activo"]:
+                    partes_em.append(
+                        formatear_directiva_asset_manual(
+                            "emoji", m_e["nombre"], m_e["x"], m_e["y"],
+                            m_e["scale"], m_e["rot"], m_e["tracking"],
+                            rel_ini, rel_fin, dur_b,
+                        )
+                    )
+            if partes_em:
+                self.datos["emoji"] = "+".join(partes_em)
+
+        self._refrescar_inputs_tiempo_assets()
+        self.on_change()
+
+    def _toggle_frame_tiempo_assets(self):
+        if not hasattr(self, "frame_tiempo_assets") or not self.frame_tiempo_assets.winfo_exists():
+            return
+        if getattr(self, "_tiempo_assets_visible", False):
+            self.frame_tiempo_assets.pack_forget()
+            self._tiempo_assets_visible = False
+            if hasattr(self, "btn_tiempo_assets_toggle") and self.btn_tiempo_assets_toggle.winfo_exists():
+                self.btn_tiempo_assets_toggle.configure(fg_color="#1e2436")
+        else:
+            self._refrescar_inputs_tiempo_assets()
+            self.frame_tiempo_assets.pack(fill="x", pady=(3, 2))
+            self._tiempo_assets_visible = True
+            if hasattr(self, "btn_tiempo_assets_toggle") and self.btn_tiempo_assets_toggle.winfo_exists():
+                self.btn_tiempo_assets_toggle.configure(fg_color="#334155")
+
+    def _actualizar_texto_btn_posicion(self):
+        if not hasattr(self, "btn_pos") or not self.btn_pos.winfo_exists():
+            return
+        activos = []
+        v_f = str(self.datos.get("flecha", "ninguna")).strip().lower()
+        if v_f not in ("", "ninguna", "ninguno", "none", "no", "-"):
+            activos.append("Flecha")
+        v_c = str(self.datos.get("circulo", "ninguno")).strip().lower()
+        if v_c not in ("", "ninguna", "ninguno", "none", "no", "-"):
+            activos.append("Círculo")
+        v_e = str(self.datos.get("emoji", "ninguno")).strip().lower()
+        if v_e not in ("", "ninguna", "ninguno", "none", "no", "-"):
+            activos.append("Emoji")
+        if activos:
+            txt = "✓ " + "+".join(activos)
+            self.btn_pos.configure(text=txt, fg_color="#2563eb", hover_color="#1d4ed8")
+        else:
+            self.btn_pos.configure(text="Flechas/Círculos", fg_color="#1d4ed8", hover_color="#1e40af")
+
     def _abrir_selector_posicion(self):
         def _on_aplicar(c_val, f_val, e_val):
             self.datos["circulo"] = c_val
             self.datos["flecha"] = f_val
             self.datos["emoji"] = e_val
+            self._actualizar_texto_btn_posicion()
+            self._refrescar_inputs_tiempo_assets()
             self.on_change()
 
         abrir_dialogo_posicion_pantalla(
@@ -1104,12 +1436,13 @@ class VisualScriptEditor(ctk.CTkFrame):
         self.metadatos_ocultos: Dict[str, str] = {
             "MODO_ENCUADRE": "full",
             "VOLUMEN_VIDEO_ORIGINAL": "0",
-            "ARCHIVO_SALIDA": "auto"
+            "ARCHIVO_SALIDA": "auto",
+            "OUTRO_LIKE": "si",
         }
         self.bloques: List[Dict] = []
         self.cards: List[BloqueGuionCard] = []
         self._modo_raw = False
-        self.modo_profundo = False
+        self.modo_profundo = True
 
         self._build_header()
         self._build_body()
@@ -1223,6 +1556,12 @@ class VisualScriptEditor(ctk.CTkFrame):
                 s_c = s.strip().lower()
                 return s_c in ("arriba", "medio", "centro", "abajo", "muy_abajo", "fondo") or bool(re.match(r"^(y:)?\d{1,4}%?$", s_c))
 
+            def _norm_campo(val_raw: str, por_defecto: str = "ninguno") -> str:
+                v = str(val_raw or "").strip()
+                if v.lower() in ("", "-", "none", "no", "null", "normal", "ninguno", "ninguna"):
+                    return por_defecto
+                return v
+
             if len(partes) >= 8 and _es_alt(partes[6]):
                 rango_t = partes[0].split("-")
                 t_ini = mmss_a_seg(rango_t[0]) if len(rango_t) > 0 else 0.0
@@ -1232,11 +1571,11 @@ class VisualScriptEditor(ctk.CTkFrame):
                 self.bloques.append({
                     "t_ini": t_ini,
                     "t_fin": t_fin,
-                    "efecto": partes[1],
-                    "sfx": partes[2],
-                    "emoji": partes[3],
-                    "flecha": partes[4],
-                    "circulo": partes[5],
+                    "efecto": _norm_campo(partes[1], "ninguno"),
+                    "sfx": _norm_campo(partes[2], "ninguno"),
+                    "emoji": _norm_campo(partes[3], "ninguno"),
+                    "flecha": _norm_campo(partes[4], "ninguna"),
+                    "circulo": _norm_campo(partes[5], "ninguno"),
                     "altura": partes[6],
                     "texto": " | ".join(partes[7:]).strip()
                 })
@@ -1249,11 +1588,11 @@ class VisualScriptEditor(ctk.CTkFrame):
                 self.bloques.append({
                     "t_ini": t_ini,
                     "t_fin": t_fin,
-                    "efecto": partes[1],
-                    "sfx": partes[2],
-                    "emoji": partes[3],
-                    "flecha": partes[4],
-                    "circulo": partes[5],
+                    "efecto": _norm_campo(partes[1], "ninguno"),
+                    "sfx": _norm_campo(partes[2], "ninguno"),
+                    "emoji": _norm_campo(partes[3], "ninguno"),
+                    "flecha": _norm_campo(partes[4], "ninguna"),
+                    "circulo": _norm_campo(partes[5], "ninguno"),
                     "altura": "70%",
                     "texto": " | ".join(partes[6:]).strip()
                 })

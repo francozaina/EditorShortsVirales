@@ -38,7 +38,11 @@ from .smart_camara import (
 )
 from .scene_cuts import DetectorCortesEscena
 from .thumbnail_picker import SelectorPortadaViral
-from motor_optimizado import realzar_frame_viral
+from motor_optimizado import (
+    realzar_frame_viral,
+    parsear_directiva_asset_manual,
+    sincronizar_guion_renderizado_en_disco,
+)
 
 # ==============================================================================
 # 7. MOTOR DE ASSETS VISUALES (FLECHA, CÍRCULO ROJO, EMOJIS) Y EFECTOS DE CÁMARA
@@ -324,8 +328,8 @@ class GestorEfectosYAssets:
         for vx, vy in puntos_rastreados:
             sx = (vx - float(ix0)) * scale_x
             sy = (vy - float(iy0)) * scale_y
-            sx = float(np.clip(sx, 48.0, WIDTH - 48.0))
-            sy = float(np.clip(sy, 64.0, HEIGHT - 180.0))
+            sx = float(np.clip(sx, 16.0, WIDTH - 16.0))
+            sy = float(np.clip(sy, 16.0, HEIGHT - 16.0))
             puntos_pantalla.append((sx, sy))
 
         if (efecto == "temblor" and t_seg < 0.7) or (efecto == "zoom_impacto" and t_seg < 0.18):
@@ -398,6 +402,8 @@ class GestorEfectosYAssets:
         t_seg: float,
         dur_seg: float,
         t_inicio_callout: float = 0.04,
+        t_fin_callout: Optional[float] = None,
+        escala_manual: Optional[float] = None,
     ) -> float:
         """
         Dibuja el circulo rojo animado directamente in-place sobre `lienzo` (NumPy RGB)
@@ -406,31 +412,37 @@ class GestorEfectosYAssets:
         if not activo or self.circulo_base_np is None:
             return 0.0
 
-        dur_mostrar = min(dur_seg - 0.05, t_inicio_callout + self.duracion_callouts)
+        if t_fin_callout is not None:
+            dur_mostrar = min(dur_seg, float(t_fin_callout))
+        else:
+            dur_mostrar = min(dur_seg - 0.05, t_inicio_callout + self.duracion_callouts)
         if t_seg < t_inicio_callout or t_seg > dur_mostrar:
             return 0.0
 
-        mapa_diametro = {
-            "chico": 240,
-            "medio": 350,
-            "grande": 460,
-        }
-        diam_base = mapa_diametro.get(tamano_mod, 475)
+        if escala_manual is not None:
+            diam_base = int(round(352.0 * float(escala_manual)))
+        else:
+            mapa_diametro = {
+                "chico": 240,
+                "medio": 352,
+                "grande": 460,
+            }
+            diam_base = mapa_diametro.get(tamano_mod, 475)
 
         t_rel = t_seg - t_inicio_callout
         if t_rel < 0.22:
             p_in = max(0.0, min(1.0, t_rel / 0.18))
-            escala = 0.25 + 0.88 * math.sin(p_in * math.pi * 0.65)
+            escala = 0.25 + 0.88 * math.sin(p_in * math.pi * 0.65) if escala_manual is None else (0.65 + 0.35 * math.sin(p_in * math.pi * 0.5))
             alpha_f = min(1.0, p_in * 1.6)
         elif t_seg > dur_mostrar - 0.18:
             p_out = max(0.0, (dur_mostrar - t_seg) / 0.18)
             escala = 0.75 + 0.25 * p_out
             alpha_f = p_out
         else:
-            escala = 1.0 + 0.025 * math.sin(t_rel * 3.5)
+            escala = 1.0 if escala_manual is not None else (1.0 + 0.025 * math.sin(t_rel * 3.5))
             alpha_f = 1.0
 
-        diam_actual = max(48, int(round(diam_base * escala)))
+        diam_actual = max(36, int(round(diam_base * escala)))
         circ_scaled = _obtener_asset_escalado_cache(
             "circulo_rojo", self.circulo_base_np, diam_actual, diam_actual, 0.0
         )
@@ -448,6 +460,9 @@ class GestorEfectosYAssets:
         dur_seg: float,
         t_inicio_callout: float = 0.04,
         angulo_forzado: Optional[float] = None,
+        t_fin_callout: Optional[float] = None,
+        escala_manual: Optional[float] = None,
+        es_coord_manual: bool = False,
     ) -> None:
         """
         Dibuja la flecha roja animada apuntando hacia `target_xy` directamente in-place sobre `lienzo`.
@@ -456,7 +471,10 @@ class GestorEfectosYAssets:
         if not activo or self.flecha_base_np is None:
             return
 
-        dur_mostrar = min(dur_seg - 0.05, t_inicio_callout + self.duracion_callouts)
+        if t_fin_callout is not None:
+            dur_mostrar = min(dur_seg, float(t_fin_callout))
+        else:
+            dur_mostrar = min(dur_seg - 0.05, t_inicio_callout + self.duracion_callouts)
         if t_seg < t_inicio_callout or t_seg > dur_mostrar:
             return
 
@@ -475,9 +493,10 @@ class GestorEfectosYAssets:
                 ux, uy = 0.78, -0.62
             angulo_grados = -math.degrees(math.atan2(uy, ux))
 
-        if t_seg < 0.20:
-            p_in = (t_seg - 0.04) / 0.16
-            escala_in = 0.45 + 0.62 * math.sin(p_in * math.pi * 0.65)
+        t_rel = t_seg - t_inicio_callout
+        if t_rel < 0.16:
+            p_in = max(0.0, min(1.0, t_rel / 0.16))
+            escala_in = (0.45 + 0.62 * math.sin(p_in * math.pi * 0.65)) if not es_coord_manual else (0.70 + 0.30 * math.sin(p_in * math.pi * 0.5))
             alpha_f = min(1.0, p_in * 1.6)
         elif t_seg > dur_mostrar - 0.18:
             p_out = max(0.0, (dur_mostrar - t_seg) / 0.18)
@@ -486,6 +505,17 @@ class GestorEfectosYAssets:
         else:
             escala_in = 1.0
             alpha_f = 1.0
+
+        if es_coord_manual:
+            base_fl = 288.0 * float(escala_manual if escala_manual is not None else 1.0)
+            tam_flecha = max(36, int(round(base_fl * escala_in)))
+            fl_scaled = _obtener_asset_escalado_cache(
+                "flecha_roja", self.flecha_base_np, tam_flecha, tam_flecha, angulo_grados
+            )
+            cx = int(round(tx))
+            cy = int(round(ty))
+            estampar_rgba_en_rgb_inplace(lienzo, fl_scaled, cx, cy, opacidad_extra=alpha_f)
+            return
 
         tam_flecha = max(96, int(round(355 * escala_in)))
         fl_scaled = _obtener_asset_escalado_cache(
@@ -584,12 +614,21 @@ class GestorEfectosYAssets:
         if base_np is None:
             return
 
+        pos_str = str(posicion_solicitada or "")
+        t_ini_em = 0.05
         dur_mostrar = max(1.2, min(dur_seg - 0.05, 3.6))
-        if t_seg < 0.05 or t_seg > dur_mostrar:
+        m_time = re.search(r"~(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)", pos_str)
+        if m_time:
+            t_ini_em = max(0.0, float(m_time.group(1)))
+            dur_mostrar = min(dur_seg, max(t_ini_em + 0.1, float(m_time.group(2))))
+            pos_str = pos_str.replace(m_time.group(0), "")
+
+        if t_seg < t_ini_em or t_seg > dur_mostrar:
             return
 
-        if t_seg < 0.24:
-            p_in = (t_seg - 0.05) / 0.19
+        t_rel_em = t_seg - t_ini_em
+        if t_rel_em < 0.19:
+            p_in = max(0.0, min(1.0, t_rel_em / 0.19))
             escala_anim = 0.22 + 0.90 * math.sin(p_in * math.pi * 0.65)
             alpha_factor = min(1.0, p_in * 1.6)
         elif t_seg > dur_mostrar - 0.20:
@@ -597,27 +636,33 @@ class GestorEfectosYAssets:
             escala_anim = 0.65 + 0.35 * p_out
             alpha_factor = p_out
         else:
-            escala_anim = 1.0 + 0.065 * math.sin(t_seg * 7.5)
+            escala_anim = 1.0 + 0.045 * math.sin(t_seg * 7.5)
             alpha_factor = 1.0
 
-        tam_base = 245
+        escala_manual = 1.0
+        m_sc = re.search(r"\*(\d+(?:\.\d+)?)", pos_str)
+        if m_sc:
+            escala_manual = max(0.25, min(3.5, float(m_sc.group(1))))
+            pos_str = pos_str.replace(m_sc.group(0), "")
+
+        tam_base = int(round(250.0 * escala_manual))
         tam_actual = max(32, int(round(tam_base * escala_anim)))
 
         # Ángulo dinámico o personalizado (@rot)
         rot_manual = 0.0
-        pos_str = str(posicion_solicitada or "")
-        m_rot = re.search(r"@(\d+(?:\.\d+)?)", pos_str)
+        m_rot = re.search(r"@(-?\d+(?:\.\d+)?)", pos_str)
         if m_rot:
             rot_manual = float(m_rot.group(1))
+            pos_str = pos_str.replace(m_rot.group(0), "")
 
-        angulo = rot_manual + 7.5 * math.sin(t_seg * 5.8)
+        angulo = -rot_manual + 5.5 * math.sin(t_seg * 5.8)
         em_scaled = _obtener_asset_escalado_cache(
             f"emoji_{nombre_emoji}", base_np, tam_actual, tam_actual, angulo
         )
 
-        pos_efectiva = pos_str.replace(f"@{m_rot.group(1)}", "") if m_rot else pos_str
+        pos_efectiva = pos_str
         es_fijo = "fijo:" in pos_efectiva
-        pos_efectiva = pos_efectiva.replace("fijo:", "")
+        pos_efectiva = pos_efectiva.replace("fijo:", "").strip()
 
         pos_map = {
             "derecha": (WIDTH - 195, 330),
@@ -646,12 +691,7 @@ class GestorEfectosYAssets:
                 pos_efectiva = "derecha"
             cx, cy = pos_map.get(pos_efectiva, pos_map["derecha"])
 
-        if not es_fijo and target_principal_xy is not None and m_coord:
-            tx, ty = target_principal_xy
-            cx = int(round(cx * 0.75 + tx * 0.25))
-            cy = int(round(cy * 0.75 + ty * 0.25))
-
-        cy += int(round(9.0 * math.sin(t_seg * 6.2)))
+        cy += int(round(6.0 * math.sin(t_seg * 6.2)))
         estampar_rgba_en_rgb_inplace(lienzo, em_scaled, cx, cy, opacidad_extra=alpha_factor)
 
 
@@ -1146,7 +1186,7 @@ def _limitar_circulos_guion(
             if c_norm in ("centro", "center", "medio", "middle", "auto") or c_norm.startswith("centro:"):
                 s.circulo = None
 
-    con_circulo = [i for i, s in enumerate(segmentos) if s.circulo]
+    con_circulo = [i for i, s in enumerate(segmentos) if s.circulo and "," not in str(s.circulo)]
     if len(con_circulo) > max_circulos:
         prioridad = sorted(con_circulo, key=lambda i: (0 if segmentos[i].tamano_circulo == "grande" else 1, i))
         conservar = set(prioridad[:max_circulos])
@@ -1161,8 +1201,8 @@ def _limitar_circulos_guion(
     # Ambos (círculo y flecha) pueden coexistir apuntando al mismo foco de atención
     pass
 
-    # Limitar la frecuencia de flechas rojas (espaciadas, evitando segmentos consecutivos)
-    con_flecha = [i for i, s in enumerate(segmentos) if s.flecha]
+    # Limitar la frecuencia de flechas rojas automáticas (respetando siempre las coordenadas manuales)
+    con_flecha = [i for i, s in enumerate(segmentos) if s.flecha and "," not in str(s.flecha)]
     if len(con_flecha) > max_flechas:
         seleccionadas: List[int] = []
         for idx in con_flecha:
@@ -1187,9 +1227,8 @@ def _limitar_circulos_guion(
             f"{', '.join(str(i + 1) for i in sorted(conservar_flechas))}."
         )
 
-    # El último bloque del video jamás debe tener flecha de seguimiento de video,
-    # porque el editor agrega automáticamente el Outro de 1 segundo con flecha apuntando al botón de Like.
-    if segmentos and segmentos[-1].flecha:
+    # El último bloque del video no lleva flecha automática (pero conserva flecha manual si el usuario la puso)
+    if segmentos and segmentos[-1].flecha and "," not in str(segmentos[-1].flecha):
         segmentos[-1].flecha = None
 
 
@@ -1411,61 +1450,69 @@ async def editar_video_con_guion(
         archivos_audio_seg.append(ruta_mix_wav)
         datos_segmentos.append([seg, total_frames_seg, dur_seg_exacta, palabras_sub, rms_env])
 
-    # 2.5 Generar Outro automatico con llamada visual al Like (campana ding, flecha animada y texto neon)
-    extra_remate = 0.0
-    if archivos_audio_seg:
-        try:
-            with wave.open(str(archivos_audio_seg[-1]), "r") as wf_last:
-                dur_real_last = wf_last.getnframes() / float(wf_last.getframerate())
-                dur_teorica_last = datos_segmentos[-1][2]
-                if dur_real_last > dur_teorica_last:
-                    extra_remate = min(1.2, dur_real_last - dur_teorica_last)
-        except Exception:
-            pass
+    # 2.5 Generar Outro automatico con llamada visual al Like (si está activado en config.incluir_outro_like)
+    incluir_outro_like = bool(getattr(config, "incluir_outro_like", True))
+    if incluir_outro_like:
+        extra_remate = 0.0
+        if archivos_audio_seg:
+            try:
+                with wave.open(str(archivos_audio_seg[-1]), "r") as wf_last:
+                    dur_real_last = wf_last.getnframes() / float(wf_last.getframerate())
+                    dur_teorica_last = datos_segmentos[-1][2]
+                    if dur_real_last > dur_teorica_last:
+                        extra_remate = min(1.2, dur_real_last - dur_teorica_last)
+            except Exception:
+                pass
 
-    dur_outro_seg = round(0.85 + extra_remate, 2)
-    total_frames_outro = int(round(FPS * dur_outro_seg))
+        dur_outro_seg = round(0.85 + extra_remate, 2)
+        total_frames_outro = int(round(FPS * dur_outro_seg))
 
-    print(f"[*] Configurando Outro final de {dur_outro_seg}s con sonido de campana (ding) y texto luminoso...")
+        print(f"[*] Configurando Outro final de {dur_outro_seg}s con sonido de campana (ding) y texto luminoso...")
 
-    # Subtitulos sincronizados para el Outro: ¡DEJA TU LIKE!
-    palabras_sub_outro = [
-        PalabraSubtitulo(texto="¡DEJA", inicio_seg=0.00, fin_seg=0.25),
-        PalabraSubtitulo(texto="TU", inicio_seg=0.25, fin_seg=0.50),
-        PalabraSubtitulo(texto="LIKE!", inicio_seg=0.50, fin_seg=dur_outro_seg, forzar_destaque=True),
-    ]
+        # Subtitulos sincronizados para el Outro: ¡DEJA TU LIKE!
+        palabras_sub_outro = [
+            PalabraSubtitulo(texto="¡DEJA", inicio_seg=0.00, fin_seg=0.25),
+            PalabraSubtitulo(texto="TU", inicio_seg=0.25, fin_seg=0.50),
+            PalabraSubtitulo(texto="LIKE!", inicio_seg=0.50, fin_seg=dur_outro_seg, forzar_destaque=True),
+        ]
 
-    # Generar pista de audio para el Outro con sonido de campana (ding)
-    ruta_mix_outro_wav = TEMP_DIR / "seg_outro_mix.wav"
-    sr_audio = gestor_sfx.sr
-    n_samples_outro = int(round(sr_audio * dur_outro_seg))
-    mezcla_outro = np.zeros(n_samples_outro, dtype=np.float32)
+        # Generar pista de audio para el Outro con sonido de campana (ding)
+        ruta_mix_outro_wav = TEMP_DIR / "seg_outro_mix.wav"
+        sr_audio = gestor_sfx.sr
+        n_samples_outro = int(round(sr_audio * dur_outro_seg))
+        mezcla_outro = np.zeros(n_samples_outro, dtype=np.float32)
 
-    ding_pcm = gestor_sfx.obtener_pcm("ding")
-    if ding_pcm is not None and len(ding_pcm) > 0:
-        n_copiar = min(n_samples_outro, len(ding_pcm))
-        mezcla_outro[:n_copiar] = ding_pcm[:n_copiar] * 0.85
+        ding_pcm = gestor_sfx.obtener_pcm("ding")
+        if ding_pcm is not None and len(ding_pcm) > 0:
+            n_copiar = min(n_samples_outro, len(ding_pcm))
+            mezcla_outro[:n_copiar] = ding_pcm[:n_copiar] * 0.85
+        else:
+            pop_pcm = gestor_sfx.obtener_pcm("pop")
+            if pop_pcm is not None and len(pop_pcm) > 0:
+                n_copiar = min(n_samples_outro, len(pop_pcm))
+                mezcla_outro[:n_copiar] = pop_pcm[:n_copiar] * 0.85
+
+        fade_samples = min(int(sr_audio * 0.06), n_samples_outro // 4)
+        if fade_samples > 0:
+            mezcla_outro[-fade_samples:] *= np.linspace(1.0, 0.0, fade_samples, dtype=np.float32)
+
+        mezcla_outro = np.clip(mezcla_outro, -0.98, 0.98)
+        pcm_outro_bytes = (mezcla_outro * 32767).astype(np.int16).tobytes()
+
+        with wave.open(str(ruta_mix_outro_wav), "w") as wf_out:
+            wf_out.setnchannels(1)
+            wf_out.setsampwidth(2)
+            wf_out.setframerate(sr_audio)
+            wf_out.writeframes(pcm_outro_bytes)
+
+        archivos_audio_seg.append(ruta_mix_outro_wav)
+        rms_env_outro = calcular_envolvente_rms(ruta_mix_outro_wav, FPS)
     else:
-        pop_pcm = gestor_sfx.obtener_pcm("pop")
-        if pop_pcm is not None and len(pop_pcm) > 0:
-            n_copiar = min(n_samples_outro, len(pop_pcm))
-            mezcla_outro[:n_copiar] = pop_pcm[:n_copiar] * 0.85
-
-    fade_samples = min(int(sr_audio * 0.06), n_samples_outro // 4)
-    if fade_samples > 0:
-        mezcla_outro[-fade_samples:] *= np.linspace(1.0, 0.0, fade_samples, dtype=np.float32)
-
-    mezcla_outro = np.clip(mezcla_outro, -0.98, 0.98)
-    pcm_outro_bytes = (mezcla_outro * 32767).astype(np.int16).tobytes()
-
-    with wave.open(str(ruta_mix_outro_wav), "w") as wf_out:
-        wf_out.setnchannels(1)
-        wf_out.setsampwidth(2)
-        wf_out.setframerate(sr_audio)
-        wf_out.writeframes(pcm_outro_bytes)
-
-    archivos_audio_seg.append(ruta_mix_outro_wav)
-    rms_env_outro = calcular_envolvente_rms(ruta_mix_outro_wav, FPS)
+        dur_outro_seg = 0.0
+        total_frames_outro = 0
+        palabras_sub_outro = []
+        rms_env_outro = np.zeros(0, dtype=np.float32)
+        print("[*] Escena final 'Deja tu Like' desactivada por configuración del guion.")
 
     _notificar_prog(0.38, "Masterizando pista de audio final (Voz + Efectos SFX + Música de fondo)...")
 
@@ -1721,6 +1768,11 @@ async def editar_video_con_guion(
                         x_left_en_frame_ancla=x_ancla_seg,
                         w_escalado_1920=w_escalado_1920,
                     )
+                    if trayectoria_circulo is None:
+                        seg.circulo = None
+                    elif "box:" in str(seg.circulo).lower() and len(trayectoria_circulo) > 0:
+                        px0, py0 = trayectoria_circulo[0]
+                        seg.circulo = f"{px0 / WIDTH * 100.0:.1f},{py0 / HEIGHT * 100.0:.1f}:{seg.tamano_circulo}"
                 if seg.flecha:
                     if mismo_objetivo and trayectoria_circulo is not None:
                         trayectoria_flecha = trayectoria_circulo
@@ -1731,16 +1783,42 @@ async def editar_video_con_guion(
                             t_inicio_seg=t_vid_ini,
                             t_fin_seg=t_vid_fin,
                         )
+                    if trayectoria_flecha is None:
+                        seg.flecha = None
 
-                # Calcular segundo relativo exacto para la aparición del círculo/flecha según t_ancla
+                # Calcular segundo relativo exacto y metadatos manuales para círculo y flecha
                 t_ini_callout_circulo = 0.04
+                t_fin_callout_circulo: Optional[float] = None
+                escala_manual_circulo: Optional[float] = None
                 if seg.circulo:
-                    info_c = parsear_directiva_circulo(seg.circulo, t_vid_ini, t_vid_fin)
-                    if info_c.activo and info_c.t_ancla is not None:
-                        t_ancla_rel = max(0.0, float(info_c.t_ancla) - t_vid_ini)
-                        t_ini_callout_circulo = max(0.04, min(dur_seg_exacta - 0.4, t_ancla_rel - 0.12))
+                    meta_c = parsear_directiva_asset_manual(seg.circulo, "circulo", t_vid_ini, t_vid_ini + dur_seg_exacta)
+                    if meta_c.get("es_manual") or meta_c.get("es_coord_manual") or meta_c.get("tiene_escala"):
+                        escala_manual_circulo = float(meta_c.get("scale", 1.0))
+                    if meta_c.get("tiene_timing"):
+                        t_ini_callout_circulo = max(0.0, float(meta_c.get("t_ini_rel", 0.0)))
+                        t_fin_callout_circulo = min(dur_seg_exacta, float(meta_c.get("t_fin_rel", dur_seg_exacta)))
+                    else:
+                        info_c = parsear_directiva_circulo(seg.circulo, t_vid_ini, t_vid_fin)
+                        if info_c.activo and info_c.t_ancla is not None:
+                            t_ancla_rel = max(0.0, float(info_c.t_ancla) - t_vid_ini)
+                            t_ini_callout_circulo = max(0.04, min(dur_seg_exacta - 0.4, t_ancla_rel - 0.12))
 
                 t_ini_callout_flecha = t_ini_callout_circulo if mismo_objetivo else 0.04
+                t_fin_callout_flecha: Optional[float] = t_fin_callout_circulo if mismo_objetivo else None
+                escala_manual_flecha: Optional[float] = None
+                es_coord_manual_flecha = False
+                ang_flecha_seg: Optional[float] = None
+                if seg.flecha:
+                    meta_f = parsear_directiva_asset_manual(seg.flecha, "flecha", t_vid_ini, t_vid_ini + dur_seg_exacta)
+                    es_coord_manual_flecha = bool(meta_f.get("es_coord_manual") or meta_f.get("es_manual"))
+                    if es_coord_manual_flecha:
+                        escala_manual_flecha = float(meta_f.get("scale", 1.0))
+                        ang_flecha_seg = float(meta_f.get("rot", 315.0))
+                    elif meta_f.get("tiene_rot"):
+                        ang_flecha_seg = float(meta_f.get("rot", 315.0))
+                    if meta_f.get("tiene_timing"):
+                        t_ini_callout_flecha = max(0.0, float(meta_f.get("t_ini_rel", 0.0)))
+                        t_fin_callout_flecha = min(dur_seg_exacta, float(meta_f.get("t_fin_rel", dur_seg_exacta)))
 
                 print(
                     f"    -> Renderizando segmento {idx_seg + 1}/{len(datos_segmentos)} "
@@ -1759,9 +1837,9 @@ async def editar_video_con_guion(
                             f"Render 60 FPS: Segmento {idx_seg + 1}/{len(datos_segmentos)} (Subtítulos Neón + Tracking)...",
                         )
 
-                    pt_c_vid = trayectoria_circulo[f_idx] if (trayectoria_circulo and t_seg >= t_ini_callout_circulo) else (WIDTH / 2.0, HEIGHT * 0.44)
-                    pt_f_vid = trayectoria_flecha[f_idx] if (trayectoria_flecha and t_seg >= t_ini_callout_flecha) else pt_c_vid
-                    foco_camara = pt_c_vid if (trayectoria_circulo and t_seg >= t_ini_callout_circulo) else (pt_f_vid if (trayectoria_flecha and t_seg >= t_ini_callout_flecha) else (WIDTH / 2.0, HEIGHT * 0.46))
+                    pt_c_vid = trayectoria_circulo[f_idx] if trayectoria_circulo else (WIDTH / 2.0, HEIGHT * 0.44)
+                    pt_f_vid = trayectoria_flecha[f_idx] if trayectoria_flecha else pt_c_vid
+                    foco_camara = pt_c_vid if trayectoria_circulo else (pt_f_vid if trayectoria_flecha else (WIDTH / 2.0, HEIGHT * 0.46))
 
                     lienzo, pts_pantalla = gestor_assets.aplicar_efecto_camara_y_transformar_puntos(
                         frame_rgb=frame_rgb,
@@ -1782,18 +1860,12 @@ async def editar_video_con_guion(
                         t_seg=t_seg,
                         dur_seg=dur_seg_exacta,
                         t_inicio_callout=t_ini_callout_circulo,
+                        t_fin_callout=t_fin_callout_circulo,
+                        escala_manual=escala_manual_circulo,
                     )
 
                     # 2) Flecha Roja siguiendo al objetivo (solo activa con trayectoria real confirmada)
-                    radio_para_flecha = radio_circulo if mismo_objetivo else 0.0
-                    ang_flecha = None
-                    if seg.flecha:
-                        m_ang = re.search(r"@(\d+(?:\.\d+)?)", str(seg.flecha))
-                        if m_ang:
-                            try:
-                                ang_flecha = float(m_ang.group(1))
-                            except Exception:
-                                pass
+                    radio_para_flecha = radio_circulo if (mismo_objetivo and not es_coord_manual_flecha) else 0.0
 
                     gestor_assets.dibujar_flecha_roja(
                         lienzo=lienzo,
@@ -1803,7 +1875,10 @@ async def editar_video_con_guion(
                         t_seg=t_seg,
                         dur_seg=dur_seg_exacta,
                         t_inicio_callout=t_ini_callout_flecha,
-                        angulo_forzado=ang_flecha,
+                        angulo_forzado=ang_flecha_seg,
+                        t_fin_callout=t_fin_callout_flecha,
+                        escala_manual=escala_manual_flecha,
+                        es_coord_manual=es_coord_manual_flecha,
                     )
 
                     # 3) Emoji animado (evitando superponerse con el objetivo rastreado)
@@ -2033,6 +2108,11 @@ async def editar_video_con_guion(
             resultado = _ejecutar_render(enc_cpu, args_cpu)
         else:
             raise
+
+    try:
+        sincronizar_guion_renderizado_en_disco(ruta_guion, config.segmentos)
+    except Exception as e_sync:
+        print(f"[!] Aviso al sincronizar guion renderizado: {e_sync}")
 
     _notificar_prog(1.0, "Renderizado 60 FPS completado con éxito.")
     print("=" * 78)

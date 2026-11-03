@@ -530,7 +530,11 @@ class RastreadorObjetivosVideo:
             return None
 
         spec_clean = _quitar_acentos(str(especificacion).strip().lower())
-        spec_track = re.sub(r"@\d+(?:\.\d+)?", "", spec_clean).strip()
+        spec_track = re.sub(
+            r"(@-?\d+(?:\.\d+)?|\*\d+(?:\.\d+)?|~\d+(?:\.\d+)?-\d+(?:\.\d+)?)",
+            "",
+            spec_clean,
+        ).strip()
 
         # Caso Fijo / Sin Tracking: posición estática manual
         if "fijo:" in spec_track or "static:" in spec_track:
@@ -817,6 +821,8 @@ class RastreadorObjetivosVideo:
         pos_muestras_y = [yc_tr]
         pts_actuales = pts.copy()
         curr_cx, curr_cy = xc_tr, yc_tr
+        offset_ancla_x = float(xc_tr - np.median(pts_actuales[:, 0, 0]))
+        offset_ancla_y = float(yc_tr - np.median(pts_actuales[:, 0, 1]))
 
         for k in range(1, len(indices_muestreados)):
             prev_idx = indices_muestreados[k - 1]
@@ -826,11 +832,8 @@ class RastreadorObjetivosVideo:
                 frames_gris[prev_idx], frames_gris[curr_idx], pts_actuales, lk_params, umbral_fb=2.5
             )
             if len(pts_nuevos) >= 3:
-                desplazamiento = np.median(
-                    pts_nuevos.reshape(-1, 2) - pts_actuales[:len(pts_nuevos)].reshape(-1, 2), axis=0
-                )
-                curr_cx += float(desplazamiento[0])
-                curr_cy += float(desplazamiento[1])
+                curr_cx = float(np.median(pts_nuevos[:, 0, 0])) + offset_ancla_x
+                curr_cy = float(np.median(pts_nuevos[:, 0, 1])) + offset_ancla_y
                 pts_actuales = pts_nuevos
                 if len(pts_actuales) < 6:
                     mascara_local = np.zeros((h_t, w_t), dtype=np.uint8)
@@ -840,6 +843,8 @@ class RastreadorObjetivosVideo:
                     )
                     if reseed is not None and len(reseed) >= 4:
                         pts_actuales = reseed
+                        offset_ancla_x = float(curr_cx - np.median(pts_actuales[:, 0, 0]))
+                        offset_ancla_y = float(curr_cy - np.median(pts_actuales[:, 0, 1]))
             pos_muestras_x.append(curr_cx)
             pos_muestras_y.append(curr_cy)
 
@@ -852,6 +857,6 @@ class RastreadorObjetivosVideo:
         xs_smooth = cls._suavizar_serie_1d(xs_interp, sigma=2.0)
         ys_smooth = cls._suavizar_serie_1d(ys_interp, sigma=2.0)
 
-        xs_full = np.clip(xs_smooth * cls.ESC_TRACK, 50.0, WIDTH - 50.0)
-        ys_full = np.clip(ys_smooth * cls.ESC_TRACK, 60.0, HEIGHT - 160.0)
+        xs_full = np.clip(xs_smooth * cls.ESC_TRACK, 20.0, WIDTH - 20.0)
+        ys_full = np.clip(ys_smooth * cls.ESC_TRACK, 20.0, HEIGHT - 20.0)
         return list(zip(xs_full.tolist(), ys_full.tolist()))
