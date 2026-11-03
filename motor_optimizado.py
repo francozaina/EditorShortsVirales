@@ -612,6 +612,44 @@ def construir_prompt_argon_con_link(
 # =====================================================================
 # 7. GESTOR DE ACTUALIZACIONES AUTOMÁTICAS DESDE GIT
 # =====================================================================
+def obtener_commits_pendientes_o_recientes(
+    raiz_dir: Optional[Union[str, Path]] = None,
+    max_commits: int = 6,
+) -> List[str]:
+    """
+    Retorna la lista de títulos de commits pendientes de descargar (HEAD..origin/main).
+    Si ya no hay pendientes, retorna los últimos commits de HEAD.
+    """
+    if raiz_dir is None:
+        raiz_dir = Path(__file__).resolve().parent
+
+    try:
+        res = subprocess.run(
+            ["git", "log", "--format=- %s", "-n", str(max_commits), "HEAD..origin/main"],
+            cwd=str(raiz_dir),
+            capture_output=True,
+            text=True,
+            timeout=5,
+            startupinfo=WIN_STARTUPINFO,
+            creationflags=WIN_NO_WINDOW,
+        )
+        lineas = [l.strip() for l in (res.stdout or "").splitlines() if l.strip()]
+        if lineas:
+            return lineas
+        res_rec = subprocess.run(
+            ["git", "log", "--format=- %s", "-n", str(max_commits), "HEAD"],
+            cwd=str(raiz_dir),
+            capture_output=True,
+            text=True,
+            timeout=5,
+            startupinfo=WIN_STARTUPINFO,
+            creationflags=WIN_NO_WINDOW,
+        )
+        return [l.strip() for l in (res_rec.stdout or "").splitlines() if l.strip()]
+    except Exception:
+        return []
+
+
 def comprobar_actualizacion_repo(raiz_dir: Optional[Union[str, Path]] = None) -> Tuple[bool, int, str]:
     """
     Comprueba de forma silenciosa si el repositorio remoto (origin/main) tiene nuevos commits.
@@ -700,7 +738,23 @@ def ejecutar_actualizacion_repo(raiz_dir: Optional[Union[str, Path]] = None) -> 
             )
             stashed = (stash_res.returncode == 0)
 
-        # 3. Pull limpio desde origin main
+        # 3. Obtener la lista de commits que se incorporarán
+        commits_nuevos: List[str] = []
+        try:
+            log_res = subprocess.run(
+                ["git", "log", "--format=- %s", "-n", "8", "HEAD..origin/main"],
+                cwd=str(raiz_dir),
+                capture_output=True,
+                text=True,
+                timeout=5,
+                startupinfo=WIN_STARTUPINFO,
+                creationflags=WIN_NO_WINDOW,
+            )
+            commits_nuevos = [l.strip() for l in (log_res.stdout or "").splitlines() if l.strip()]
+        except Exception:
+            commits_nuevos = []
+
+        # 4. Pull limpio desde origin main
         res = subprocess.run(
             ["git", "pull", "--no-rebase", "origin", "main"],
             cwd=str(raiz_dir),
@@ -727,9 +781,26 @@ def ejecutar_actualizacion_repo(raiz_dir: Optional[Union[str, Path]] = None) -> 
 
         if res.returncode == 0:
             out = res.stdout.strip()
+            if not commits_nuevos:
+                try:
+                    log_rec = subprocess.run(
+                        ["git", "log", "--format=- %s", "-n", "5", "HEAD"],
+                        cwd=str(raiz_dir),
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        startupinfo=WIN_STARTUPINFO,
+                        creationflags=WIN_NO_WINDOW,
+                    )
+                    commits_nuevos = [l.strip() for l in (log_rec.stdout or "").splitlines() if l.strip()]
+                except Exception:
+                    pass
+
             if "Already up to date" in out or "Ya está actualizado" in out:
                 return True, "La app ya está en la última versión disponible."
-            return True, "Actualización completada con éxito."
+
+            txt_cambios = ("\n\nCambios incorporados:\n" + "\n".join(commits_nuevos)) if commits_nuevos else ""
+            return True, f"Actualización completada con éxito.{txt_cambios}"
         else:
             err = res.stderr.strip() or res.stdout.strip()
             return False, f"Fallo al actualizar: {err[:140]}"

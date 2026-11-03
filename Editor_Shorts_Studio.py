@@ -2870,9 +2870,15 @@ def iniciar_aplicacion_gui() -> None:
                         if btn_ajustes is not None:
                             btn_ajustes.configure(text="Ajustes", border_color=CARD_BORDER, text_color=TEXT_MAIN)
 
+                        bloque_cambios = ""
+                        if "Cambios incorporados:" in msg_pull:
+                            partes_c = msg_pull.split("Cambios incorporados:")
+                            if len(partes_c) > 1 and partes_c[1].strip():
+                                bloque_cambios = f"\n\nCambios incorporados:\n{partes_c[1].strip()}"
+
                         resp = messagebox.askyesno(
                             "Actualización Completada",
-                            "¡Shorts Studio se actualizó correctamente a la última versión!\n\n¿Deseas reiniciar la aplicación ahora para aplicar los cambios?",
+                            f"¡Shorts Studio se actualizó correctamente a la última versión!{bloque_cambios}\n\n¿Deseas reiniciar la aplicación ahora para aplicar los cambios?",
                             parent=win,
                         )
                         if resp:
@@ -2904,8 +2910,11 @@ def iniciar_aplicacion_gui() -> None:
                 def _ui_fin_chk():
                     try:
                         if hay_upd:
+                            from motor_optimizado import obtener_commits_pendientes_o_recientes
+                            commits_pend = obtener_commits_pendientes_o_recientes(BASE_DIR, max_commits=3)
+                            resumen_commits = ("\n" + "\n".join(commits_pend[:3])) if commits_pend else ""
                             lbl_estado_act.configure(
-                                text=f"Hay {cant_upd} mejora{'s' if cant_upd != 1 else ''} nueva{'s' if cant_upd != 1 else ''} disponible{'s' if cant_upd != 1 else ''} en GitHub",
+                                text=f"Hay {cant_upd} mejora{'s' if cant_upd != 1 else ''} nueva{'s' if cant_upd != 1 else ''} en GitHub:{resumen_commits}",
                                 text_color="#facc15",
                             )
                             btn_accion_act.configure(
