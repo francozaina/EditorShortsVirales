@@ -696,8 +696,11 @@ def subir_video(
 
     tags_final = tags or meta.get("tags") or ["shorts", "humor", "viral", "comedia", "bromas"]
 
-    # Schedule: Si se pasa texto amigable o ISO, normalizarlo
-    publish_at_final = parsear_schedule_fecha(publish_at) or meta.get("schedule")
+    # Schedule: Si se pasa texto amigable o ISO, normalizarlo. Si se indica explícitamente sin schedule ("no", "sin schedule", etc.), omitir
+    if publish_at is not None and str(publish_at).strip().lower() in ("", "no", "none", "null", "ninguno", "ninguna", "sin schedule", "directo", "privado"):
+        publish_at_final = None
+    else:
+        publish_at_final = parsear_schedule_fecha(publish_at) or meta.get("schedule")
 
     # Declaración para niños: Por defecto False (audiencia general / comentarios y monetización activa)
     kids_final = para_ninos if para_ninos is not None else meta.get("para_ninos", False)
@@ -753,7 +756,7 @@ def subir_video(
         print(f"   Estado:     PROGRAMADO (Schedule)")
         print(f"   Publica en: {publish_at_final} (UTC)")
     else:
-        print(f"   Estado:     {status_priv.upper()}")
+        print(f"   Estado:     {status_priv.upper()} (Sin programar)")
     print("=" * 80)
 
     pool_secrets = listar_archivos_credenciales_pool()
@@ -1225,7 +1228,7 @@ if __name__ == "__main__":
             titulo=args.titulo,
             descripcion=args.descripcion,
             privacidad=privacidad,
-            publish_at=args.schedule,
+            publish_at=args.schedule if args.schedule else ("no" if args.privado else None),
             para_ninos=args.para_ninos,
             ruta_guion=ruta_guion_usar,
         )

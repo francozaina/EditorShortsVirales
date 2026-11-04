@@ -382,7 +382,7 @@ def iniciar_aplicacion_gui() -> None:
                     "min_views_millones": str(leido.get("min_views_millones", "1.0M+ vistas")),
                     "cantidad_total": str(leido.get("cantidad_total", "2 Shorts")),
                     "shorts_por_dia": str(leido.get("shorts_por_dia", "2 / día")),
-                    "modo_horario": ("Horario Específico" if ("Específ" in str(leido.get("modo_horario", "")) or "especif" in str(leido.get("modo_horario", "")).lower()) else ("Cada X hs" if "Cada" in str(leido.get("modo_horario", "")) else "Horarios Pico")),
+                    "modo_horario": ("Privado sin schedule" if "Privado" in str(leido.get("modo_horario", "")) else ("Horario Específico" if ("Específ" in str(leido.get("modo_horario", "")) or "especif" in str(leido.get("modo_horario", "")).lower()) else ("Cada X hs" if "Cada" in str(leido.get("modo_horario", "")) else "Horarios Pico"))),
                     "hora_esp": str(leido.get("hora_esp", leido.get("hora", "13:00")) or "13:00"),
                     "hora_desde": str(leido.get("hora_desde", "13:00") or "13:00"),
                     "intervalo_horas": str(re.sub(r"\D", "", str(leido.get("intervalo_horas", "8"))) or "8"),
@@ -545,7 +545,7 @@ def iniciar_aplicacion_gui() -> None:
             SCHEDULE_MEM_FILE.write_text(
                 _json.dumps(
                     {
-                        "activar_schedule": True,
+                        "activar_schedule": modo_horario_var.get() != "Privado sin schedule",
                         "videos_editados_guardados": [str(p) for p in lista_videos_editados_locales],
                         "fecha": fecha_elegida_var.get(),
                         "hora": (hora_esp_var.get() if "Específ" in modo_horario_var.get() else hora_desde_var.get()),
@@ -2161,11 +2161,11 @@ def iniciar_aplicacion_gui() -> None:
 
     opt_estrategia = ctk.CTkOptionMenu(
         row_plan2,
-        values=["Horarios Pico", "Cada X hs", "Horario Específico"],
+        values=["Horarios Pico", "Cada X hs", "Horario Específico", "Privado sin schedule"],
         variable=modo_horario_var,
         corner_radius=8,
         height=34,
-        width=150,
+        width=165,
         fg_color=INPUT_BG,
         button_color="#242426",
         button_hover_color="#34343a",
@@ -2212,7 +2212,7 @@ def iniciar_aplicacion_gui() -> None:
         else:
             cant_t = len(lista_videos_editados_locales) if lista_videos_editados_locales else 1
         por_d = MAPA_POR_DIA.get(shorts_por_dia_var.get(), 2)
-        if not programar_var.get():
+        if not programar_var.get() or modo_horario_var.get() == "Privado sin schedule":
             return [None] * cant_t
         raw_int = re.sub(r"\D", "", intervalo_horas_var.get())
         interv = max(1, min(24, int(raw_int))) if raw_int else 8
@@ -2236,8 +2236,13 @@ def iniciar_aplicacion_gui() -> None:
         return [s for s in slots]
 
     def refrescar_plan_ui(*_args: object) -> None:
-        if _args and isinstance(_args[0], str) and _args[0] in ("Horarios Pico", "Cada X hs", "Horario Específico"):
+        if _args and isinstance(_args[0], str) and _args[0] in ("Horarios Pico", "Cada X hs", "Horario Específico", "Privado sin schedule"):
             modo_horario_var.set(_args[0])
+        est_act = modo_horario_var.get()
+        if est_act == "Privado sin schedule":
+            programar_var.set(False)
+        else:
+            programar_var.set(True)
         _guardar_memoria()
         mf = modo_fuente_var.get()
         es_canales = "Canales" in mf
@@ -2247,23 +2252,28 @@ def iniciar_aplicacion_gui() -> None:
 
         if es_canales:
             opt_cantidad_total.configure(state="normal")
-            opt_por_dia.configure(state="normal")
+            opt_por_dia.configure(state="disabled" if est_act == "Privado sin schedule" else "normal")
         else:
             opt_cantidad_total.configure(state="disabled")
             opt_por_dia.configure(state="disabled")
 
-        est_act = modo_horario_var.get()
         frame_sub_cada_x_hs.pack_forget()
         frame_sub_horario_especifico.pack_forget()
 
-        if "Cada X" in est_act:
-            frame_controles_estrategia_extra.pack(side="right", padx=(0, 16))
-            frame_sub_cada_x_hs.pack(side="left")
-        elif "Específ" in est_act or "Fijo" in est_act:
-            frame_controles_estrategia_extra.pack(side="right", padx=(0, 16))
-            frame_sub_horario_especifico.pack(side="left")
-        else:
+        if est_act == "Privado sin schedule":
+            btn_calendario.pack_forget()
             frame_controles_estrategia_extra.pack_forget()
+        else:
+            if not btn_calendario.winfo_ismapped():
+                btn_calendario.pack(side="left", padx=(0, 8), before=preview_box)
+            if "Cada X" in est_act:
+                frame_controles_estrategia_extra.pack(side="right", padx=(0, 16))
+                frame_sub_cada_x_hs.pack(side="left")
+            elif "Específ" in est_act or "Fijo" in est_act:
+                frame_controles_estrategia_extra.pack(side="right", padx=(0, 16))
+                frame_sub_horario_especifico.pack(side="left")
+            else:
+                frame_controles_estrategia_extra.pack_forget()
 
         slots = calcular_lista_horarios_actual()
         partes_prev: List[str] = []
@@ -2298,15 +2308,23 @@ def iniciar_aplicacion_gui() -> None:
 
             partes_prev.append(f"#{idx_s + 1} {tiempo_txt}")
 
-        resumen_str = "  ·  ".join(partes_prev)
-        if modo_c_act in ("todas", "grupo") and strat_c_act == "rotacion" and len(c_plan_obj) > 1 and len(slots) < len(c_plan_obj):
-            resumen_str += f"  (Rotando: {len(c_plan_obj) - len(slots)} cuenta(s) sin video en este lote)"
-        lbl_preview_horarios.configure(
-            text=resumen_str,
-            text_color="#ffffff",
-            wraplength=540,
-            justify="left",
-        )
+        if est_act == "Privado sin schedule":
+            lbl_preview_horarios.configure(
+                text="🔒 Subida en Privado directa (sin schedule ni programación en cola)",
+                text_color="#38bdf8",
+                wraplength=540,
+                justify="left",
+            )
+        else:
+            resumen_str = "  ·  ".join(partes_prev)
+            if modo_c_act in ("todas", "grupo") and strat_c_act == "rotacion" and len(c_plan_obj) > 1 and len(slots) < len(c_plan_obj):
+                resumen_str += f"  (Rotando: {len(c_plan_obj) - len(slots)} cuenta(s) sin video en este lote)"
+            lbl_preview_horarios.configure(
+                text=resumen_str,
+                text_color="#ffffff",
+                wraplength=540,
+                justify="left",
+            )
         autoajustar_tamano_ventana()
         refrescar_texto_boton_accion()
 
@@ -6201,7 +6219,7 @@ def iniciar_aplicacion_gui() -> None:
                 text_color="#A0A0A5",
             ).pack(side="left", padx=(8, 4), pady=3)
 
-            def _crear_chip_auto(parent_f, texto_chip: str, var_b: tk.BooleanVar):
+            def _crear_chip_auto(parent_f, texto_chip: str, var_b: tk.BooleanVar, on_toggle=None):
                 btn_c = ctk.CTkButton(
                     parent_f,
                     text=texto_chip,
@@ -6236,17 +6254,24 @@ def iniciar_aplicacion_gui() -> None:
 
                 def _toggle_chip():
                     var_b.set(not var_b.get())
+                    if on_toggle:
+                        on_toggle(var_b.get())
                     _refrescar_chip()
 
                 btn_c.configure(command=_toggle_chip)
                 btn_c.pack(side="left", padx=2, pady=3)
                 return btn_c
 
+            auto_assets_var = tk.BooleanVar(value=bool(auto_emojis_var.get() or auto_flechas_var.get() or auto_circulos_var.get()))
+
+            def _sincronizar_auto_assets(val: bool):
+                auto_emojis_var.set(val)
+                auto_flechas_var.set(val)
+                auto_circulos_var.set(val)
+
             _crear_chip_auto(f_auto_bar, "Efectos", auto_efectos_var)
             _crear_chip_auto(f_auto_bar, "SFX", auto_sfx_var)
-            _crear_chip_auto(f_auto_bar, "Emojis", auto_emojis_var)
-            _crear_chip_auto(f_auto_bar, "Flechas", auto_flechas_var)
-            _crear_chip_auto(f_auto_bar, "Círculos", auto_circulos_var)
+            _crear_chip_auto(f_auto_bar, "Assets", auto_assets_var, on_toggle=_sincronizar_auto_assets)
 
         def _seek_en_reproductor(t_seg: float) -> None:
             if player is not None and duracion_total > 0:
@@ -7385,10 +7410,11 @@ def iniciar_aplicacion_gui() -> None:
                                         _set_subprogreso(0.30, f"{pref_lote}Preparando nuevo video en editor manual...", PURPLE_MAIN)
                                         root.after(0, lambda p=pref_lote: btn_auto_1clic.configure(text=f"{p}LISTO PARA EDITAR GUION..."))
 
+                                        sched_para_guion = "no" if (modo_horario_var.get() == "Privado sin schedule" or not programar_var.get()) else (sched_actual or "auto")
                                         plantilla_raw = generar_plantilla_guion_manual(
                                             ruta_video=ruta_video_usar,
                                             titulo_sugerido=titulo_orig or ruta_video_usar.stem,
-                                            sched_str=sched_actual or "auto",
+                                            sched_str=sched_para_guion,
                                             modo_priv="privado" if modo_priv == "private" else modo_priv,
                                             modo_encuadre=encuadre_elegido,
                                         )
@@ -7408,7 +7434,7 @@ def iniciar_aplicacion_gui() -> None:
                                         generar_guion_con_gemini_flash(
                                             ruta_video=ruta_video_usar,
                                             api_key=api_k,
-                                            schedule_str=sched_actual or "auto",
+                                            schedule_str=sched_para_guion,
                                             modo_privacidad="privado" if modo_priv == "private" else modo_priv,
                                             contexto_titulo_orig=titulo_orig,
                                             modelo_preferido=pref_modelo_ia,
@@ -7524,12 +7550,13 @@ def iniciar_aplicacion_gui() -> None:
                                 "#c084fc",
                             )
 
+                            sched_subida = "no" if (modo_horario_var.get() == "Privado sin schedule" or not programar_var.get()) else sched_actual
                             vid_id = subir_video(
                                 ruta_video=ruta_final,
                                 titulo=c_tit if (es_custom_activo and c_tit) else None,
                                 descripcion=c_desc if (es_custom_activo and c_desc) else None,
                                 estado_privacidad=modo_priv,
-                                publish_at=sched_actual,
+                                publish_at=sched_subida,
                                 ruta_guion=DEFAULT_GUION_TXT,
                                 cuenta_id=id_cuenta_usar,
                                 callback_cancelar=lambda: evento_cancelar.is_set(),
@@ -7549,9 +7576,10 @@ def iniciar_aplicacion_gui() -> None:
 
                         txt_milestone_fin = f"Reel {num_actual}: ✓ Subido" + (f" ({total_cdest} cuentas)" if total_cdest > 1 else "")
                         _actualizar_milestone_actual("subido", txt_milestone_fin)
+                        tag_res_subida = "PRIVADO (SIN SCHEDULE)" if (modo_horario_var.get() == "Privado sin schedule" or not programar_var.get()) else (sched_actual or modo_priv.upper())
                         _set_subprogreso(
                             1.0,
-                            f"{pref_lote}Reel {num_actual} subido con éxito a {total_cdest} cuenta(s) ({sched_actual or modo_priv.upper()})",
+                            f"{pref_lote}Reel {num_actual} subido con éxito a {total_cdest} cuenta(s) ({tag_res_subida})",
                             GREEN_ACCENT,
                         )
 

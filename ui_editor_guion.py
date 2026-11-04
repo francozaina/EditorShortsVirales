@@ -128,7 +128,7 @@ def abrir_dialogo_posicion_pantalla(
     from pathlib import Path
 
     win_p = ctk.CTkToplevel(parent_win)
-    win_p.title("Editor de Flechas, Círculos y Emojis")
+    win_p.title("Editor de Assets")
     win_p.geometry("380x865")
     win_p.minsize(360, 760)
     win_p.resizable(False, True)
@@ -679,16 +679,6 @@ def abrir_dialogo_posicion_pantalla(
     ent_ap.pack(side="left", padx=(0, 4), pady=4)
 
     ctk.CTkLabel(
-        f_timing, text="Dur:", font=ctk.CTkFont(size=10, weight="bold"), text_color="#94a3b8"
-    ).pack(side="left", padx=(2, 2))
-    ent_dur = ctk.CTkEntry(
-        f_timing, width=44, height=23, justify="center",
-        font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
-        fg_color="#0e111a", border_color="#2a344c"
-    )
-    ent_dur.pack(side="left", padx=(0, 4), pady=4)
-
-    ctk.CTkLabel(
         f_timing, text="Fin:", font=ctk.CTkFont(size=10, weight="bold"), text_color="#94a3b8"
     ).pack(side="left", padx=(2, 2))
     ent_des = ctk.CTkEntry(
@@ -720,7 +710,6 @@ def abrir_dialogo_posicion_pantalla(
             return
         try:
             v_ap = float(ent_ap.get().replace("s", "").strip())
-            v_dur = float(ent_dur.get().replace("s", "").strip())
             v_des = float(ent_des.get().replace("s", "").strip())
         except Exception:
             return
@@ -738,8 +727,8 @@ def abrir_dialogo_posicion_pantalla(
                 rel_fin = v_des
             rel_fin = max(rel_ini + 0.1, min(dur_bloque, rel_fin))
         else:
-            dur_c = max(0.1, min(dur_bloque - rel_ini, v_dur))
-            rel_fin = min(dur_bloque, rel_ini + dur_c)
+            dur_prev = max(0.2, selected_sprite.t_fin_rel - selected_sprite.t_ini_rel)
+            rel_fin = min(dur_bloque, rel_ini + dur_prev)
 
         selected_sprite.t_ini_rel = round(rel_ini, 2)
         selected_sprite.t_fin_rel = round(rel_fin, 2)
@@ -748,8 +737,6 @@ def abrir_dialogo_posicion_pantalla(
 
     ent_ap.bind("<Return>", lambda _: _aplicar_timing_entries("ini"))
     ent_ap.bind("<FocusOut>", lambda _: _aplicar_timing_entries("ini"))
-    ent_dur.bind("<Return>", lambda _: _aplicar_timing_entries("dur"))
-    ent_dur.bind("<FocusOut>", lambda _: _aplicar_timing_entries("dur"))
     ent_des.bind("<Return>", lambda _: _aplicar_timing_entries("fin"))
     ent_des.bind("<FocusOut>", lambda _: _aplicar_timing_entries("fin"))
 
@@ -766,15 +753,12 @@ def abrir_dialogo_posicion_pantalla(
             var_tracking.set(selected_sprite.tracking)
             chk_tracking.configure(state="normal")
             btn_quitar.configure(state="normal")
-            for w_e in (ent_ap, ent_dur, ent_des, btn_t_now):
+            for w_e in (ent_ap, ent_des, btn_t_now):
                 w_e.configure(state="normal")
             abs_ini = t_ini + selected_sprite.t_ini_rel
             abs_fin = t_ini + selected_sprite.t_fin_rel
-            dur_sp = max(0.1, abs_fin - abs_ini)
             ent_ap.delete(0, "end")
             ent_ap.insert(0, f"{abs_ini:.1f}")
-            ent_dur.delete(0, "end")
-            ent_dur.insert(0, f"{dur_sp:.1f}")
             ent_des.delete(0, "end")
             ent_des.insert(0, f"{abs_fin:.1f}")
         else:
@@ -784,7 +768,7 @@ def abrir_dialogo_posicion_pantalla(
             )
             chk_tracking.configure(state="disabled")
             btn_quitar.configure(state="disabled")
-            for w_e in (ent_ap, ent_dur, ent_des):
+            for w_e in (ent_ap, ent_des):
                 w_e.configure(state="normal")
                 w_e.delete(0, "end")
                 w_e.insert(0, "-")
@@ -1049,13 +1033,18 @@ class BloqueGuionCard(ctk.CTkFrame):
             row_assets_1, "SFX 2", LISTA_SFX, sfx2_val, width=105
         )
 
-        # Botón Flechas/Círculos a la derecha en la misma línea
+        # Botón Assets a la derecha en la misma línea
         f_btn_pos = ctk.CTkFrame(row_assets_1, fg_color="transparent")
         f_btn_pos.pack(side="left", padx=3, pady=2)
-        ctk.CTkLabel(f_btn_pos, text="", font=ctk.CTkFont(size=10)).pack(anchor="w")
+        ctk.CTkLabel(
+            f_btn_pos,
+            text="Assets",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            text_color="#707075",
+        ).pack(anchor="w")
         btn_pos = ctk.CTkButton(
             f_btn_pos,
-            text="Sin Asset",
+            text="Sin Assets",
             command=self._abrir_selector_posicion,
             height=26,
             width=116,
@@ -1097,7 +1086,7 @@ class BloqueGuionCard(ctk.CTkFrame):
         ctk.CTkLabel(f_btn_tas, text="", font=ctk.CTkFont(size=10)).pack(anchor="w")
         self.btn_tiempo_assets_toggle = ctk.CTkButton(
             f_btn_tas,
-            text="Tiempo Asset",
+            text="Tiempo Assets",
             command=self._toggle_frame_tiempo_assets,
             height=26,
             width=102,
@@ -1131,24 +1120,10 @@ class BloqueGuionCard(ctk.CTkFrame):
 
         ctk.CTkLabel(
             self.frame_tiempo_assets,
-            text="Duración (s):",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="#94a3b8",
-        ).pack(side="left", padx=(2, 4), pady=4)
-
-        self.ent_asset_dur = ctk.CTkEntry(
-            self.frame_tiempo_assets, width=48, height=23, justify="center",
-            font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
-            fg_color="#0e111a", border_color="#2a344c"
-        )
-        self.ent_asset_dur.pack(side="left", padx=(0, 6), pady=4)
-
-        ctk.CTkLabel(
-            self.frame_tiempo_assets,
             text="Desaparece (s):",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#94a3b8",
-        ).pack(side="left", padx=(2, 4), pady=4)
+        ).pack(side="left", padx=(6, 4), pady=4)
 
         self.ent_asset_fin = ctk.CTkEntry(
             self.frame_tiempo_assets, width=48, height=23, justify="center",
@@ -1161,8 +1136,6 @@ class BloqueGuionCard(ctk.CTkFrame):
 
         self.ent_asset_ini.bind("<Return>", lambda _: self._aplicar_tiempo_assets_card("ini"))
         self.ent_asset_ini.bind("<FocusOut>", lambda _: self._aplicar_tiempo_assets_card("ini"))
-        self.ent_asset_dur.bind("<Return>", lambda _: self._aplicar_tiempo_assets_card("dur"))
-        self.ent_asset_dur.bind("<FocusOut>", lambda _: self._aplicar_tiempo_assets_card("dur"))
         self.ent_asset_fin.bind("<Return>", lambda _: self._aplicar_tiempo_assets_card("fin"))
         self.ent_asset_fin.bind("<FocusOut>", lambda _: self._aplicar_tiempo_assets_card("fin"))
 
@@ -1239,8 +1212,7 @@ class BloqueGuionCard(ctk.CTkFrame):
                     break
         abs_ini = t_i + rel_ini
         abs_fin = t_i + rel_fin
-        dur_a = max(0.1, abs_fin - abs_ini)
-        for ent_w, val_f in ((self.ent_asset_ini, abs_ini), (self.ent_asset_dur, dur_a), (self.ent_asset_fin, abs_fin)):
+        for ent_w, val_f in ((self.ent_asset_ini, abs_ini), (self.ent_asset_fin, abs_fin)):
             ent_w.delete(0, "end")
             ent_w.insert(0, f"{val_f:.1f}")
 
@@ -1252,7 +1224,6 @@ class BloqueGuionCard(ctk.CTkFrame):
         dur_b = max(0.2, round(t_f - t_i, 2))
         try:
             v_ap = float(self.ent_asset_ini.get().replace("s", "").strip())
-            v_dur = float(self.ent_asset_dur.get().replace("s", "").strip())
             v_des = float(self.ent_asset_fin.get().replace("s", "").strip())
         except Exception:
             self._refrescar_inputs_tiempo_assets()
@@ -1264,8 +1235,9 @@ class BloqueGuionCard(ctk.CTkFrame):
             rel_fin = (v_des - t_i) if (v_des >= t_i and t_i > 0.0) else v_des
             rel_fin = max(rel_ini + 0.1, min(dur_b, rel_fin))
         else:
-            dur_c = max(0.1, min(dur_b - rel_ini, v_dur))
-            rel_fin = min(dur_b, rel_ini + dur_c)
+            rel_fin = (v_des - t_i) if (v_des >= t_i and t_i > 0.0) else v_des
+            if rel_fin <= rel_ini:
+                rel_fin = min(dur_b, rel_ini + 2.0)
 
         rel_ini = round(rel_ini, 2)
         rel_fin = round(rel_fin, 2)
@@ -1328,10 +1300,9 @@ class BloqueGuionCard(ctk.CTkFrame):
         if v_e not in ("", "ninguna", "ninguno", "none", "no", "-"):
             activos.append("Emoji")
         if activos:
-            txt = "✓ " + "+".join(activos)
-            self.btn_pos.configure(text=txt, fg_color="#242426", hover_color="#2e2e32")
+            self.btn_pos.configure(text="✓ Assets", fg_color="#242426", hover_color="#2e2e32")
         else:
-            self.btn_pos.configure(text="Sin Asset", fg_color="#242426", hover_color="#2e2e32")
+            self.btn_pos.configure(text="Sin Assets", fg_color="#242426", hover_color="#2e2e32")
 
     def _abrir_selector_posicion(self):
         def _on_aplicar(c_val, f_val, e_val):
