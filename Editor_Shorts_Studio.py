@@ -107,16 +107,33 @@ def iniciar_aplicacion_gui() -> None:
     root.minsize(920, 480)
     root.configure(fg_color="#121212")
 
-    def autoajustar_tamano_ventana() -> None:
-        """
-        Amolda dinámicamente la altura de la ventana para que calce exactamente
-        con el contenido actual (sin dejar espacios vacíos abajo).
-        """
+    _resize_after_id: List[Optional[str]] = [None]
+    _ultimo_req_h: List[int] = [0]
+
+    def _ejecutar_autoajuste_ventana() -> None:
+        _resize_after_id[0] = None
         try:
             root.update_idletasks()
             req_h = root.winfo_reqheight() + 8
-            cur_w = max(860, root.winfo_width())
-            root.geometry(f"{cur_w}x{req_h}")
+            cur_w = max(920, root.winfo_width())
+            if abs(req_h - _ultimo_req_h[0]) >= 3 or _ultimo_req_h[0] == 0:
+                _ultimo_req_h[0] = req_h
+                root.geometry(f"{cur_w}x{req_h}")
+        except Exception:
+            pass
+
+    def autoajustar_tamano_ventana() -> None:
+        """
+        Amolda dinámicamente la altura de la ventana con debounce (1 sola pasada por frame)
+        para evitar parpadeos o saltos de geometría al cambiar de modo.
+        """
+        try:
+            if _resize_after_id[0] is not None:
+                try:
+                    root.after_cancel(_resize_after_id[0])
+                except Exception:
+                    pass
+            _resize_after_id[0] = root.after_idle(_ejecutar_autoajuste_ventana)
         except Exception:
             pass
 
@@ -516,7 +533,10 @@ def iniciar_aplicacion_gui() -> None:
         "Cada 12h": 12,
     }
 
-    def _guardar_memoria(*_args: object) -> None:
+    _guardar_mem_after_id: List[Optional[str]] = [None]
+
+    def _escribir_memoria_disco() -> None:
+        _guardar_mem_after_id[0] = None
         try:
             cid_act = str(estado_seleccion_cuentas.get("cuenta_id") or "")
             if cid_act and str(estado_seleccion_cuentas.get("modo") or "una") == "una":
@@ -565,6 +585,17 @@ def iniciar_aplicacion_gui() -> None:
             )
         except Exception:
             pass
+
+    def _guardar_memoria(*_args: object) -> None:
+        try:
+            if _guardar_mem_after_id[0] is not None:
+                try:
+                    root.after_cancel(_guardar_mem_after_id[0])
+                except Exception:
+                    pass
+            _guardar_mem_after_id[0] = root.after(80, _escribir_memoria_disco)
+        except Exception:
+            _escribir_memoria_disco()
 
     def _formatear_boton_fecha(iso_str: str) -> str:
         try:
@@ -812,6 +843,8 @@ def iniciar_aplicacion_gui() -> None:
     tarjetas_fuente_refs: Dict[str, Dict[str, Any]] = {}
 
     def _seleccionar_fuente_tarjeta(modo_val: str) -> None:
+        if modo_fuente_var.get() == modo_val:
+            return
         modo_fuente_var.set(modo_val)
         actualizar_modo_vista()
 
@@ -860,8 +893,24 @@ def iniciar_aplicacion_gui() -> None:
         )
         lbl_desc.pack(fill="x", padx=14, pady=(0, 12))
 
+        def _on_enter_f(_e: Any = None, m: str = modo_val) -> None:
+            if modo_fuente_var.get() != m:
+                try:
+                    f_card.configure(fg_color="#1e1e22", border_color="#3f3f46")
+                except Exception:
+                    pass
+
+        def _on_leave_f(_e: Any = None, m: str = modo_val) -> None:
+            if modo_fuente_var.get() != m:
+                try:
+                    f_card.configure(fg_color="#171719", border_color="#2c2c30")
+                except Exception:
+                    pass
+
         for w in (f_card, row_t, lbl_dot, lbl_tit, lbl_desc):
             w.bind("<Button-1>", lambda _e, m=modo_val: _seleccionar_fuente_tarjeta(m))
+            w.bind("<Enter>", _on_enter_f)
+            w.bind("<Leave>", _on_leave_f)
 
         tarjetas_fuente_refs[modo_val] = {
             "frame": f_card,
@@ -908,9 +957,10 @@ def iniciar_aplicacion_gui() -> None:
             except Exception:
                 pass
 
-    # Contenedor contextual dentro de la caja de Selección del Material de Entrada
+    # Contenedor contextual dentro de la caja de Selección del Material de Entrada (grid fijo para cambio instantáneo sin parpadeo)
     contenedor_paso1 = ctk.CTkFrame(card_entrada_outer, fg_color="transparent")
     contenedor_paso1.pack(fill="x", padx=16, pady=(0, 16))
+    contenedor_paso1.grid_columnconfigure(0, weight=1)
 
     # --- TARJETA MODO A: POOL DE CANALES FUENTE ---
     card_canales = ctk.CTkFrame(contenedor_paso1, fg_color="#141416", corner_radius=12, border_width=1, border_color="#28282b")
@@ -1019,7 +1069,23 @@ def iniciar_aplicacion_gui() -> None:
     )
     btn_add_canal.pack(side="right", anchor="center")
 
-    def renderizar_chips_canales() -> None:
+    _firma_chips_canales: List[Any] = [None]
+
+    def renderizar_chips_canales(forzar: bool = False) -> None:
+        modo_ord = orden_canales_var.get()
+        es_modo_fijo = ("Único" in modo_ord or "fijo" in modo_ord.lower())
+        if es_modo_fijo and not canal_fijo_var.get() and lista_canales:
+            canal_fijo_var.set(lista_canales[0])
+        firma_actual = (
+            tuple(lista_canales),
+            modo_ord,
+            canal_fijo_var.get(),
+            estado_rotacion["idx"] % max(1, len(lista_canales)),
+        )
+        if not forzar and _firma_chips_canales[0] == firma_actual and chips_container.winfo_children():
+            return
+        _firma_chips_canales[0] = firma_actual
+
         for w in chips_container.winfo_children():
             w.destroy()
         if not lista_canales:
@@ -1034,11 +1100,6 @@ def iniciar_aplicacion_gui() -> None:
 
         row_frame = None
         MAX_POR_FILA = 3
-        modo_ord = orden_canales_var.get()
-        es_modo_fijo = ("Único" in modo_ord or "fijo" in modo_ord.lower())
-
-        if es_modo_fijo and not canal_fijo_var.get() and lista_canales:
-            canal_fijo_var.set(lista_canales[0])
 
         for idx_c, c_url in enumerate(lista_canales):
             if idx_c % MAX_POR_FILA == 0:
@@ -1196,7 +1257,14 @@ def iniciar_aplicacion_gui() -> None:
 
 
 
-    def _renderizar_lista_videos_editados() -> None:
+    _firma_videos_editados: List[Any] = [None]
+
+    def _renderizar_lista_videos_editados(forzar: bool = False) -> None:
+        firma_act = tuple(str(p) for p in lista_videos_editados_locales)
+        if not forzar and _firma_videos_editados[0] == firma_act and filas_editados_container.winfo_children():
+            return
+        _firma_videos_editados[0] = firma_act
+
         for w in filas_editados_container.winfo_children():
             w.destroy()
 
@@ -1551,8 +1619,28 @@ def iniciar_aplicacion_gui() -> None:
         )
         lbl_arr.pack(side="right")
 
+        def _on_enter_m(_e: Any = None, mv: str = modo_val) -> None:
+            ms_act = modo_subida_var.get()
+            activo = (mv == ms_act) or ("Manual" in mv and "Manual" in ms_act) or ("Revisión" in mv and ("Revisión" in ms_act or "Revision" in ms_act)) or ("Automática" in mv and "Automática" in ms_act)
+            if not activo:
+                try:
+                    m_card.configure(fg_color="#202024", border_color="#3f3f46")
+                except Exception:
+                    pass
+
+        def _on_leave_m(_e: Any = None, mv: str = modo_val) -> None:
+            ms_act = modo_subida_var.get()
+            activo = (mv == ms_act) or ("Manual" in mv and "Manual" in ms_act) or ("Revisión" in mv and ("Revisión" in ms_act or "Revision" in ms_act)) or ("Automática" in mv and "Automática" in ms_act)
+            if not activo:
+                try:
+                    m_card.configure(fg_color="#1c1c1e", border_color="#2c2c30")
+                except Exception:
+                    pass
+
         for w in (m_card, ico_box, lbl_ico, lbl_tag, lbl_tit, lbl_desc, cta_row, lbl_cta, lbl_arr):
             w.bind("<Button-1>", lambda _e, mv=modo_val, ini=iniciar_al_clic: _activar_modo_edicion_card(mv, ini))
+            w.bind("<Enter>", _on_enter_m)
+            w.bind("<Leave>", _on_leave_m)
 
         tarjetas_modo_refs[modo_val] = {
             "frame": m_card,
@@ -1805,13 +1893,13 @@ def iniciar_aplicacion_gui() -> None:
         pers_actual = obtener_personalidad_canal_activo()
 
         win_p = ctk.CTkToplevel(parent_win or root)
+        win_p.withdraw()
         win_p.title("Personalidad Visual y Estilo por Canal")
         win_p.geometry("540x630")
         win_p.resizable(False, False)
         win_p.configure(fg_color=BG_DARK)
         win_p.transient(parent_win or root)
         aplicar_icono_ventana(win_p)
-        win_p.grab_set()
 
         card_p = ctk.CTkFrame(win_p, fg_color=CARD_BG, corner_radius=18, border_width=1, border_color=CARD_BORDER)
         card_p.pack(fill="both", expand=True, padx=20, pady=20)
@@ -1931,18 +2019,41 @@ def iniciar_aplicacion_gui() -> None:
             height=32,
             corner_radius=12,
             fg_color=INPUT_BG,
-            hover_color="#1d2334",
+            hover_color="#242428",
             border_width=1,
             border_color=CARD_BORDER,
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
         ).pack(side="right")
 
-    def refrescar_selector_cuentas_ui() -> None:
+        win_p.update_idletasks()
+        try:
+            rx = root.winfo_x() + (root.winfo_width() // 2) - 270
+            ry = root.winfo_y() + (root.winfo_height() // 2) - 315
+            win_p.geometry(f"540x630+{max(0, rx)}+{max(0, ry)}")
+        except Exception:
+            pass
+        win_p.deiconify()
+        win_p.lift()
+        win_p.focus_force()
+        win_p.grab_set()
+
+    _cache_cuentas_mem: Dict[str, Any] = {"ts": 0.0, "data": []}
+
+    def _obtener_cuentas_vinculadas_fast(forzar: bool = False) -> List[Dict[str, Any]]:
+        ahora_t = time.time()
+        if not forzar and _cache_cuentas_mem["data"] and (ahora_t - float(_cache_cuentas_mem["ts"])) < 3.0:
+            return list(_cache_cuentas_mem["data"])
         try:
             from subir_a_youtube import listar_cuentas_vinculadas
-            cuentas = listar_cuentas_vinculadas()
+            c_list = listar_cuentas_vinculadas() or [{"id": "principal", "nombre": "Canal Principal", "avatar_path": ""}]
         except Exception:
-            cuentas = [{"id": "principal", "nombre": "Canal Principal", "avatar_path": ""}]
+            c_list = [{"id": "principal", "nombre": "Canal Principal", "avatar_path": ""}]
+        _cache_cuentas_mem["ts"] = ahora_t
+        _cache_cuentas_mem["data"] = c_list
+        return list(c_list)
+
+    def refrescar_selector_cuentas_ui(forzar_disco: bool = False) -> None:
+        cuentas = _obtener_cuentas_vinculadas_fast(forzar=forzar_disco)
         if not cuentas:
             cuentas = [{"id": "principal", "nombre": "Canal Principal", "avatar_path": ""}]
 
@@ -2159,9 +2270,8 @@ def iniciar_aplicacion_gui() -> None:
         modo_c_act = str(estado_seleccion_cuentas.get("modo") or "una")
         strat_c_act = str(estado_seleccion_cuentas.get("estrategia") or "cross_posting")
 
-        from subir_a_youtube import listar_cuentas_vinculadas
         try:
-            cuentas_v_plan = listar_cuentas_vinculadas() or [{"id": "principal", "nombre": "Canal Principal"}]
+            cuentas_v_plan = _obtener_cuentas_vinculadas_fast()
         except Exception:
             cuentas_v_plan = [{"id": "principal", "nombre": "Canal Principal"}]
         dict_cv = {str(c.get("id") or "principal"): c for c in cuentas_v_plan}
@@ -2340,6 +2450,8 @@ def iniciar_aplicacion_gui() -> None:
         except Exception:
             pass
 
+    _modo_fuente_mostrado: List[str] = [""]
+
     def actualizar_modo_vista(*_args: object) -> None:
         _guardar_memoria()
         try:
@@ -2347,35 +2459,49 @@ def iniciar_aplicacion_gui() -> None:
             _refrescar_estilo_tarjetas_modo()
         except Exception:
             pass
-        renderizar_chips_canales()
-        _renderizar_lista_videos_editados()
-        card_canales.pack_forget()
-        card_link.pack_forget()
-        card_video_editado.pack_forget()
 
         mf = modo_fuente_var.get()
         es_editado = "Editado" in mf
-        if "Canales" in mf:
-            card_canales.pack(fill="x")
+        es_canales = "Canales" in mf
+
+        # Solo reconstruir la sub-vista activa si cambió o no está creada
+        if es_canales:
+            renderizar_chips_canales()
+        elif es_editado:
+            _renderizar_lista_videos_editados()
+
+        # Intercambio atómico en celda grid(0, 0) para evitar colapso a 0px y parpadeos
+        if es_canales:
+            target_card = card_canales
+            otros = (card_link, card_video_editado)
         elif "Link" in mf:
-            card_link.pack(fill="x")
+            target_card = card_link
+            otros = (card_canales, card_video_editado)
         else:
-            card_video_editado.pack(fill="x")
+            target_card = card_video_editado
+            otros = (card_canales, card_link)
+
+        if _modo_fuente_mostrado[0] != mf or not target_card.winfo_ismapped():
+            target_card.grid(row=0, column=0, sticky="ew")
+            target_card.tkraise()
+            for o_card in otros:
+                o_card.grid_remove()
+            _modo_fuente_mostrado[0] = mf
 
         if btn_guardar_carpeta is not None and row_botones_accion is not None and btn_auto_1clic is not None:
             if es_editado:
-                btn_guardar_carpeta.grid_remove()
-                row_botones_accion.grid_columnconfigure(1, weight=0)
-                btn_auto_1clic.grid_configure(padx=0)
+                if btn_guardar_carpeta.winfo_ismapped():
+                    btn_guardar_carpeta.grid_remove()
+                    row_botones_accion.grid_columnconfigure(1, weight=0)
+                    btn_auto_1clic.grid_configure(padx=0)
             else:
-                row_botones_accion.grid_columnconfigure(0, weight=8)
-                row_botones_accion.grid_columnconfigure(1, weight=2)
-                btn_auto_1clic.grid_configure(padx=(0, 8))
-                btn_guardar_carpeta.grid(row=0, column=1, sticky="nsew")
+                if not btn_guardar_carpeta.winfo_ismapped():
+                    row_botones_accion.grid_columnconfigure(0, weight=8)
+                    row_botones_accion.grid_columnconfigure(1, weight=2)
+                    btn_auto_1clic.grid_configure(padx=(0, 8))
+                    btn_guardar_carpeta.grid(row=0, column=1, sticky="nsew")
 
         refrescar_plan_ui()
-        refrescar_texto_boton_accion()
-        autoajustar_tamano_ventana()
 
     # ==========================================================================
     # VENTANA DE AJUSTES (CON TOGGLE DE MODO, CONTENIDO IA/MANUAL Y MODELO ARGON 4)
@@ -3373,13 +3499,13 @@ def iniciar_aplicacion_gui() -> None:
 
     def abrir_selector_cuentas_popup() -> None:
         pop = ctk.CTkToplevel(root)
+        pop.withdraw()
         pop.title("Elegir Cuenta o Grupo de Subida")
         pop.geometry("560x580")
         pop.resizable(False, False)
         pop.configure(fg_color=BG_DARK)
         pop.transient(root)
         aplicar_icono_ventana(pop)
-        pop.grab_set()
 
         pop.grid_columnconfigure(0, weight=1)
         pop.grid_rowconfigure(3, weight=1)
@@ -3803,15 +3929,28 @@ def iniciar_aplicacion_gui() -> None:
             bot_bar,
             text="Listo",
             command=pop.destroy,
-            corner_radius=14,
+            corner_radius=12,
             height=36,
-            fg_color="#1e2436",
-            hover_color="#2d354d",
-            text_color="#ffffff",
+            fg_color="#242426",
+            hover_color="#2e2e32",
+            border_width=1,
+            border_color="#38383e",
+            text_color="#EDEDED",
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
         ).pack(fill="x")
 
         _render_lista_popup()
+        pop.update_idletasks()
+        try:
+            rx = root.winfo_x() + (root.winfo_width() // 2) - 280
+            ry = root.winfo_y() + (root.winfo_height() // 2) - 290
+            pop.geometry(f"560x580+{max(0, rx)}+{max(0, ry)}")
+        except Exception:
+            pass
+        pop.deiconify()
+        pop.lift()
+        pop.focus_force()
+        pop.grab_set()
 
     _CACHE_SHORTS_PROGRAMADOS: List[Dict[str, Any]] = []
 
@@ -3994,6 +4133,7 @@ def iniciar_aplicacion_gui() -> None:
             return
 
         win_p = ctk.CTkToplevel(root)
+        win_p.withdraw()
         _ventana_programados_ref = win_p
         win_p.title("Shorts Programados en Cola")
         win_p.geometry("740x630")
@@ -4001,7 +4141,6 @@ def iniciar_aplicacion_gui() -> None:
         win_p.configure(fg_color=BG_DARK)
         win_p.transient(root)
         aplicar_icono_ventana(win_p)
-        win_p.grab_set()
 
         scroll_f = ctk.CTkScrollableFrame(
             win_p,
@@ -4244,6 +4383,18 @@ def iniciar_aplicacion_gui() -> None:
             ).pack(pady=16)
             _sync_silencioso_programados(forzar_render=True)
 
+        win_p.update_idletasks()
+        try:
+            rx = root.winfo_x() + (root.winfo_width() // 2) - 370
+            ry = root.winfo_y() + (root.winfo_height() // 2) - 315
+            win_p.geometry(f"740x630+{max(0, rx)}+{max(0, ry)}")
+        except Exception:
+            pass
+        win_p.deiconify()
+        win_p.lift()
+        win_p.focus_force()
+        win_p.grab_set()
+
     def abrir_ventana_overview_rendimiento() -> None:
         nonlocal _ventana_overview_ref
         if _ventana_overview_ref and _ventana_overview_ref.winfo_exists():
@@ -4252,6 +4403,7 @@ def iniciar_aplicacion_gui() -> None:
             return
 
         win_o = ctk.CTkToplevel(root)
+        win_o.withdraw()
         _ventana_overview_ref = win_o
         win_o.title("Overview de Rendimiento")
         win_o.geometry("820x680")
@@ -4259,7 +4411,6 @@ def iniciar_aplicacion_gui() -> None:
         win_o.configure(fg_color=BG_DARK)
         win_o.transient(root)
         aplicar_icono_ventana(win_o)
-        win_o.grab_set()
 
         # Barra de ordenamiento superior
         sort_bar = ctk.CTkFrame(win_o, fg_color="transparent")
@@ -4567,6 +4718,18 @@ def iniciar_aplicacion_gui() -> None:
                 text_color=TEXT_MUTED,
             ).pack(pady=16)
             _sync_silencioso_overview(forzar_render=True)
+
+        win_o.update_idletasks()
+        try:
+            rx = root.winfo_x() + (root.winfo_width() // 2) - 410
+            ry = root.winfo_y() + (root.winfo_height() // 2) - 340
+            win_o.geometry(f"820x680+{max(0, rx)}+{max(0, ry)}")
+        except Exception:
+            pass
+        win_o.deiconify()
+        win_o.lift()
+        win_o.focus_force()
+        win_o.grab_set()
 
     def _ciclo_auto_refresco_silencioso() -> None:
         if not editando_lock.locked():
@@ -5600,6 +5763,7 @@ def iniciar_aplicacion_gui() -> None:
         ruta_video_origen: Optional[Path] = None,
     ) -> None:
         win_r = ctk.CTkToplevel(root)
+        win_r.withdraw()
         win_r.title("Shorts Studio · Edición Manual" if es_modo_manual_inicial else "Shorts Studio · Revisión Previa")
         win_r.geometry("1080x700")
         win_r.minsize(980, 640)
@@ -5607,9 +5771,6 @@ def iniciar_aplicacion_gui() -> None:
         win_r.configure(fg_color=BG_DARK)
         win_r.transient(root)
         aplicar_icono_ventana(win_r)
-        win_r.lift()
-        win_r.focus_force()
-        win_r.grab_set()
 
         player = None
         reproduciendo = False
@@ -6276,6 +6437,18 @@ def iniciar_aplicacion_gui() -> None:
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             text_color="#f87171",
         ).grid(row=0, column=1, padx=(4, 0), sticky="ew")
+
+        win_r.update_idletasks()
+        try:
+            rx = root.winfo_x() + (root.winfo_width() // 2) - 540
+            ry = root.winfo_y() + (root.winfo_height() // 2) - 350
+            win_r.geometry(f"1080x700+{max(0, rx)}+{max(0, ry)}")
+        except Exception:
+            pass
+        win_r.deiconify()
+        win_r.lift()
+        win_r.focus_force()
+        win_r.grab_set()
 
         # Inicialización del reproductor ffpyplayer (inicia pausado)
         try:

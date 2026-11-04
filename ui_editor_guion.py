@@ -887,13 +887,13 @@ class BloqueGuionCard(ctk.CTkFrame):
         top_frame = ctk.CTkFrame(self, fg_color="transparent")
         top_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 4))
 
-        badge = ctk.CTkLabel(
+        self.lbl_badge_idx = ctk.CTkLabel(
             top_frame, text=f"#{self.index + 1}",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             fg_color="#222225", corner_radius=6, width=28, height=24,
             text_color="#ffffff"
         )
-        badge.pack(side="left", padx=(0, 6))
+        self.lbl_badge_idx.pack(side="left", padx=(0, 6))
 
         ctk.CTkLabel(top_frame, text="⏱", font=ctk.CTkFont(size=12), text_color="#707075").pack(side="left", padx=(0, 2))
 
@@ -1714,6 +1714,8 @@ class VisualScriptEditor(ctk.CTkFrame):
         self.cards.clear()
 
         for idx, b in enumerate(self.bloques):
+            # Los primeros 2 bloques cargan desplegados al instante; el resto diferido para apertura inmediata (0ms)
+            mostrar_ini = self.modo_profundo and (idx < 2)
             card = BloqueGuionCard(
                 self.scroll_cards,
                 index=idx,
@@ -1722,12 +1724,16 @@ class VisualScriptEditor(ctk.CTkFrame):
                 on_time_edit=self._on_block_time_edited,
                 on_move=self._mover_bloque,
                 on_delete=self._eliminar_bloque,
-                mostrar_assets_inicial=self.modo_profundo,
+                mostrar_assets_inicial=mostrar_ini,
                 ruta_video=self.ruta_video,
                 on_preview_live=self.on_preview_live,
             )
             card.grid(row=idx, column=0, sticky="ew", padx=4, pady=4)
             self.cards.append(card)
+            if self.modo_profundo and not mostrar_ini:
+                card.mostrar_assets = True
+                card.btn_toggle_card_assets.configure(text="▲ Ocultar", fg_color="#202023")
+                self.after(18 * (idx - 1), lambda c_ref=card: (c_ref._asegurar_assets_frame() if c_ref.winfo_exists() and c_ref.mostrar_assets else None))
 
     def _on_block_time_edited(self, idx: int, campo: str, nuevo_seg: float):
         """Efecto dominó (Ripple Time): sincroniza el fin de un bloque con el inicio del siguiente in-place."""
@@ -1775,16 +1781,26 @@ class VisualScriptEditor(ctk.CTkFrame):
     def _mover_bloque(self, idx: int, direccion: int):
         target = idx + direccion
         if 0 <= idx < len(self.bloques) and 0 <= target < len(self.bloques):
+            for c in self.cards:
+                if c._assets_creados:
+                    c._guardar_valores_assets_a_datos()
             self.bloques[idx], self.bloques[target] = self.bloques[target], self.bloques[idx]
-            # Reencadenar tiempos desde 00:00 conservando la duración de cada bloque
+            if idx < len(self.cards) and target < len(self.cards):
+                self.cards[idx], self.cards[target] = self.cards[target], self.cards[idx]
             t_curr = 0.0
-            for b in self.bloques:
+            for j, b in enumerate(self.bloques):
                 d = max(0.5, b["t_fin"] - b["t_ini"])
                 b["t_ini"] = t_curr
                 b["t_fin"] = t_curr + d
                 t_curr += d
+                if j < len(self.cards):
+                    c_j = self.cards[j]
+                    c_j.index = j
+                    c_j.datos = b
+                    c_j.lbl_badge_idx.configure(text=f"#{j + 1}")
+                    c_j.grid_configure(row=j)
+                    c_j.refrescar_tiempos_ui()
 
-            self._renderizar_tarjetas()
             self._actualizar_raw_interno()
 
     def _agregar_bloque_arriba(self):
@@ -1800,8 +1816,22 @@ class VisualScriptEditor(ctk.CTkFrame):
             "circulo": "ninguno",
             "texto": "¡Escribe aquí la nueva narración sincronizada!"
         }
+        idx_nuevo = len(self.bloques)
         self.bloques.append(nuevo)
-        self._renderizar_tarjetas()
+        card = BloqueGuionCard(
+            self.scroll_cards,
+            index=idx_nuevo,
+            datos=nuevo,
+            on_change=self._actualizar_raw_interno,
+            on_time_edit=self._on_block_time_edited,
+            on_move=self._mover_bloque,
+            on_delete=self._eliminar_bloque,
+            mostrar_assets_inicial=self.modo_profundo,
+            ruta_video=self.ruta_video,
+            on_preview_live=self.on_preview_live,
+        )
+        card.grid(row=idx_nuevo, column=0, sticky="ew", padx=4, pady=4)
+        self.cards.append(card)
         self._actualizar_raw_interno()
 
     def _eliminar_bloque(self, idx: int):
@@ -1809,12 +1839,24 @@ class VisualScriptEditor(ctk.CTkFrame):
             return
         if 0 <= idx < len(self.bloques):
             eliminado = self.bloques.pop(idx)
+            if idx < len(self.cards):
+                c_del = self.cards.pop(idx)
+                try:
+                    c_del.destroy()
+                except Exception:
+                    pass
             dur = eliminado["t_fin"] - eliminado["t_ini"]
             for j in range(idx, len(self.bloques)):
                 self.bloques[j]["t_ini"] = max(0.0, self.bloques[j]["t_ini"] - dur)
                 self.bloques[j]["t_fin"] = max(self.bloques[j]["t_ini"] + 1.0, self.bloques[j]["t_fin"] - dur)
+            for j, c_j in enumerate(self.cards):
+                c_j.index = j
+                if j < len(self.bloques):
+                    c_j.datos = self.bloques[j]
+                c_j.lbl_badge_idx.configure(text=f"#{j + 1}")
+                c_j.grid_configure(row=j)
+                c_j.refrescar_tiempos_ui()
 
-            self._renderizar_tarjetas()
             self._actualizar_raw_interno()
 
     def get(self, index1="1.0", index2="end") -> str:
