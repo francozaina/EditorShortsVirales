@@ -866,7 +866,7 @@ class BloqueGuionCard(ctk.CTkFrame):
         ruta_video: Optional[Any] = None,
         on_preview_live: Optional[Callable] = None,
     ):
-        super().__init__(master, fg_color="#181B26", corner_radius=10, border_width=1, border_color="#2A3147")
+        super().__init__(master, fg_color="#141416", corner_radius=12, border_width=1, border_color="#28282d")
         self.index = index
         self.datos = datos
         self.on_change = on_change
@@ -885,34 +885,34 @@ class BloqueGuionCard(ctk.CTkFrame):
     def _build_ui(self):
         # ---------------- FILA 1: TIEMPOS + SEMÁFORO + ACCIONES ----------------
         top_frame = ctk.CTkFrame(self, fg_color="transparent")
-        top_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 4))
+        top_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 4))
 
         badge = ctk.CTkLabel(
             top_frame, text=f"#{self.index + 1}",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color="#313952", corner_radius=6, width=28, height=24,
-            text_color="#f8fafc"
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            fg_color="#222225", corner_radius=6, width=28, height=24,
+            text_color="#ffffff"
         )
         badge.pack(side="left", padx=(0, 6))
 
-        ctk.CTkLabel(top_frame, text="⏱", font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 2))
+        ctk.CTkLabel(top_frame, text="⏱", font=ctk.CTkFont(size=12), text_color="#707075").pack(side="left", padx=(0, 2))
 
         self.entry_t_ini = ctk.CTkEntry(
             top_frame, width=54, height=24, justify="center",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
-            fg_color="#101524", border_color="#2a3147"
+            fg_color="#1c1c1e", border_color="#2e2e32", text_color="#ffffff"
         )
         self.entry_t_ini.insert(0, seg_a_mmss(self.datos["t_ini"]))
         self.entry_t_ini.pack(side="left", padx=2)
         self.entry_t_ini.bind("<FocusOut>", self._on_ini_edited)
         self.entry_t_ini.bind("<Return>", self._on_ini_edited)
 
-        ctk.CTkLabel(top_frame, text="→", font=ctk.CTkFont(size=12, weight="bold"), text_color="#64748b").pack(side="left", padx=2)
+        ctk.CTkLabel(top_frame, text="→", font=ctk.CTkFont(size=12, weight="bold"), text_color="#707075").pack(side="left", padx=2)
 
         self.entry_t_fin = ctk.CTkEntry(
             top_frame, width=54, height=24, justify="center",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
-            fg_color="#101524", border_color="#2a3147"
+            fg_color="#1c1c1e", border_color="#2e2e32", text_color="#ffffff"
         )
         self.entry_t_fin.insert(0, seg_a_mmss(self.datos["t_fin"]))
         self.entry_t_fin.pack(side="left", padx=2)
@@ -920,7 +920,7 @@ class BloqueGuionCard(ctk.CTkFrame):
         self.entry_t_fin.bind("<Return>", self._on_fin_edited)
 
         self.lbl_duracion = ctk.CTkLabel(
-            top_frame, text="", font=ctk.CTkFont(size=11, weight="bold"), text_color="#94a3b8"
+            top_frame, text="", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color="#707075"
         )
         self.lbl_duracion.pack(side="left", padx=(6, 4))
 
@@ -928,21 +928,24 @@ class BloqueGuionCard(ctk.CTkFrame):
 
         # Botones de acción a la derecha
         btn_del = ctk.CTkButton(
-            top_frame, text="🗑", width=26, height=24, fg_color="#45121b", hover_color="#881337",
+            top_frame, text="🗑", width=26, height=24, fg_color="#2a1719", hover_color="#381a1d",
+            border_width=1, border_color="#451a22", text_color="#fb7185",
             font=ctk.CTkFont(size=11),
             command=lambda: self.on_delete(self.index)
         )
         btn_del.pack(side="right", padx=(3, 0))
 
         btn_down = ctk.CTkButton(
-            top_frame, text="▼", width=24, height=24, fg_color="#1e2436", hover_color="#2d354d",
+            top_frame, text="▼", width=24, height=24, fg_color="#202023", hover_color="#28282c",
+            border_width=1, border_color="#2e2e32", text_color="#A0A0A5",
             font=ctk.CTkFont(size=10, weight="bold"),
             command=lambda: self.on_move(self.index, 1)
         )
         btn_down.pack(side="right", padx=2)
 
         btn_up = ctk.CTkButton(
-            top_frame, text="▲", width=24, height=24, fg_color="#1e2436", hover_color="#2d354d",
+            top_frame, text="▲", width=24, height=24, fg_color="#202023", hover_color="#28282c",
+            border_width=1, border_color="#2e2e32", text_color="#A0A0A5",
             font=ctk.CTkFont(size=10, weight="bold"),
             command=lambda: self.on_move(self.index, -1)
         )
@@ -950,12 +953,15 @@ class BloqueGuionCard(ctk.CTkFrame):
 
         self.btn_toggle_card_assets = ctk.CTkButton(
             top_frame,
-            text="▲ Ocultar" if self.mostrar_assets else "🎛️ Assets",
+            text="▲ Ocultar" if self.mostrar_assets else "▼ Mostrar",
             width=76,
             height=24,
-            fg_color="#3B4261" if self.mostrar_assets else "#22283A",
-            hover_color="#333D59",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#202023" if self.mostrar_assets else "#18181b",
+            hover_color="#28282c",
+            border_width=1,
+            border_color="#2e2e32",
+            text_color="#A0A0A5",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             command=self._toggle_assets_local
         )
         self.btn_toggle_card_assets.pack(side="right", padx=4)
@@ -966,12 +972,14 @@ class BloqueGuionCard(ctk.CTkFrame):
 
         # ---------------- FILA 3: VOICEOVER / TEXTO DE NARRACIÓN ----------------
         vo_frame = ctk.CTkFrame(self, fg_color="transparent")
-        vo_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(4, 8))
+        vo_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=(4, 10))
         vo_frame.grid_columnconfigure(0, weight=1)
 
         self.entry_texto = ctk.CTkEntry(
-            vo_frame, height=32, font=ctk.CTkFont(size=13),
-            placeholder_text="Escribe aquí el texto del guion con signos ¡!..."
+            vo_frame, height=34, font=ctk.CTkFont(family="Segoe UI", size=12),
+            fg_color="#101012", border_color="#242428", text_color="#ffffff",
+            corner_radius=10,
+            placeholder_text="Escribe aquí la frase o locución de esta escena..."
         )
         self.entry_texto.insert(0, str(self.datos.get("texto", "")))
         self.entry_texto.grid(row=0, column=0, sticky="ew")
@@ -1027,7 +1035,7 @@ class BloqueGuionCard(ctk.CTkFrame):
         row_assets_1.pack(fill="x", pady=(0, 4))
 
         self.opt_efecto = self._crear_selector(
-            row_assets_1, "🎥 Efecto", LISTA_EFECTOS, self.datos.get("efecto", "ninguno"), width=105
+            row_assets_1, "Efecto", LISTA_EFECTOS, self.datos.get("efecto", "ninguno"), width=105
         )
 
         sfx_partes = [s.strip() for s in str(self.datos.get("sfx", "")).split("+") if s.strip()]
@@ -1035,10 +1043,10 @@ class BloqueGuionCard(ctk.CTkFrame):
         sfx2_val = sfx_partes[1] if len(sfx_partes) >= 2 else "ninguno"
 
         self.opt_sfx1 = self._crear_selector(
-            row_assets_1, "🔊 SFX 1", LISTA_SFX, sfx1_val, width=105
+            row_assets_1, "SFX 1", LISTA_SFX, sfx1_val, width=105
         )
         self.opt_sfx2 = self._crear_selector(
-            row_assets_1, "🔊 SFX 2", LISTA_SFX, sfx2_val, width=105
+            row_assets_1, "SFX 2", LISTA_SFX, sfx2_val, width=105
         )
 
         # Botón Flechas/Círculos a la derecha en la misma línea
@@ -1047,13 +1055,17 @@ class BloqueGuionCard(ctk.CTkFrame):
         ctk.CTkLabel(f_btn_pos, text="", font=ctk.CTkFont(size=10)).pack(anchor="w")
         btn_pos = ctk.CTkButton(
             f_btn_pos,
-            text="Flechas/Círculos",
+            text="Sin Asset",
             command=self._abrir_selector_posicion,
-            height=24,
+            height=26,
             width=116,
-            fg_color="#1d4ed8",
-            hover_color="#1e40af",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            corner_radius=8,
+            fg_color="#242426",
+            hover_color="#2e2e32",
+            border_width=1,
+            border_color="#38383e",
+            text_color="#ffffff",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
         )
         btn_pos.pack()
         self.btn_pos = btn_pos
@@ -1065,13 +1077,17 @@ class BloqueGuionCard(ctk.CTkFrame):
         ctk.CTkLabel(f_btn_alt, text="", font=ctk.CTkFont(size=10)).pack(anchor="w")
         self.btn_alt_toggle = ctk.CTkButton(
             f_btn_alt,
-            text="📏 Altura Texto",
+            text="Altura Texto",
             command=self._toggle_frame_altura,
-            height=24,
+            height=26,
             width=92,
-            fg_color="#1e2436",
-            hover_color="#2d354d",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            corner_radius=8,
+            fg_color="#202023",
+            hover_color="#28282c",
+            border_width=1,
+            border_color="#2e2e32",
+            text_color="#A0A0A5",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
         )
         self.btn_alt_toggle.pack()
 
@@ -1081,13 +1097,17 @@ class BloqueGuionCard(ctk.CTkFrame):
         ctk.CTkLabel(f_btn_tas, text="", font=ctk.CTkFont(size=10)).pack(anchor="w")
         self.btn_tiempo_assets_toggle = ctk.CTkButton(
             f_btn_tas,
-            text="⏱ Tiempo Assets",
+            text="Tiempo Asset",
             command=self._toggle_frame_tiempo_assets,
-            height=24,
+            height=26,
             width=102,
-            fg_color="#1e2436",
-            hover_color="#2d354d",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            corner_radius=8,
+            fg_color="#202023",
+            hover_color="#28282c",
+            border_width=1,
+            border_color="#2e2e32",
+            text_color="#A0A0A5",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
         )
         self.btn_tiempo_assets_toggle.pack()
 
@@ -1194,12 +1214,12 @@ class BloqueGuionCard(ctk.CTkFrame):
             self.frame_altura.pack_forget()
             self._altura_visible = False
             if hasattr(self, "btn_alt_toggle") and self.btn_alt_toggle.winfo_exists():
-                self.btn_alt_toggle.configure(fg_color="#1e2436")
+                self.btn_alt_toggle.configure(fg_color="#202023", text_color="#A0A0A5")
         else:
             self.frame_altura.pack(fill="x", pady=(3, 2))
             self._altura_visible = True
             if hasattr(self, "btn_alt_toggle") and self.btn_alt_toggle.winfo_exists():
-                self.btn_alt_toggle.configure(fg_color="#334155")
+                self.btn_alt_toggle.configure(fg_color="#28282c", text_color="#ffffff")
 
     def _refrescar_inputs_tiempo_assets(self):
         if not hasattr(self, "ent_asset_ini"):
@@ -1286,13 +1306,13 @@ class BloqueGuionCard(ctk.CTkFrame):
             self.frame_tiempo_assets.pack_forget()
             self._tiempo_assets_visible = False
             if hasattr(self, "btn_tiempo_assets_toggle") and self.btn_tiempo_assets_toggle.winfo_exists():
-                self.btn_tiempo_assets_toggle.configure(fg_color="#1e2436")
+                self.btn_tiempo_assets_toggle.configure(fg_color="#202023", text_color="#A0A0A5")
         else:
             self._refrescar_inputs_tiempo_assets()
             self.frame_tiempo_assets.pack(fill="x", pady=(3, 2))
             self._tiempo_assets_visible = True
             if hasattr(self, "btn_tiempo_assets_toggle") and self.btn_tiempo_assets_toggle.winfo_exists():
-                self.btn_tiempo_assets_toggle.configure(fg_color="#334155")
+                self.btn_tiempo_assets_toggle.configure(fg_color="#28282c", text_color="#ffffff")
 
     def _actualizar_texto_btn_posicion(self):
         if not hasattr(self, "btn_pos") or not self.btn_pos.winfo_exists():
@@ -1309,9 +1329,9 @@ class BloqueGuionCard(ctk.CTkFrame):
             activos.append("Emoji")
         if activos:
             txt = "✓ " + "+".join(activos)
-            self.btn_pos.configure(text=txt, fg_color="#2563eb", hover_color="#1d4ed8")
+            self.btn_pos.configure(text=txt, fg_color="#242426", hover_color="#2e2e32")
         else:
-            self.btn_pos.configure(text="Flechas/Círculos", fg_color="#1d4ed8", hover_color="#1e40af")
+            self.btn_pos.configure(text="Sin Asset", fg_color="#242426", hover_color="#2e2e32")
 
     def _abrir_selector_posicion(self):
         def _on_aplicar(c_val, f_val, e_val):
@@ -1363,18 +1383,18 @@ class BloqueGuionCard(ctk.CTkFrame):
         self.mostrar_assets = not self.mostrar_assets
         if self.mostrar_assets:
             self._asegurar_assets_frame()
-            self.btn_toggle_card_assets.configure(text="▲ Ocultar", fg_color="#3B4261")
+            self.btn_toggle_card_assets.configure(text="▲ Ocultar", fg_color="#202023")
         else:
             self._sincronizar_estado()
             if hasattr(self, "assets_frame") and self.assets_frame.winfo_exists():
                 self.assets_frame.grid_remove()
-            self.btn_toggle_card_assets.configure(text="🎛️ Assets", fg_color="#22283A")
+            self.btn_toggle_card_assets.configure(text="▼ Mostrar", fg_color="#18181b")
         self.on_change()
 
     def _crear_selector(self, parent, label: str, lista: List[str], val_actual: str, width: int = 120):
         f = ctk.CTkFrame(parent, fg_color="transparent")
         f.pack(side="left", padx=4, pady=2)
-        ctk.CTkLabel(f, text=label, font=ctk.CTkFont(size=10, weight="bold"), text_color="#94a3b8").pack(anchor="w")
+        ctk.CTkLabel(f, text=label, font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), text_color="#707075").pack(anchor="w")
 
         val_clean = str(val_actual).strip()
         lista_final = list(lista)
@@ -1382,8 +1402,10 @@ class BloqueGuionCard(ctk.CTkFrame):
             lista_final.append(val_clean)
 
         opt = ctk.CTkOptionMenu(
-            f, values=lista_final, width=width, height=24,
-            corner_radius=6, font=ctk.CTkFont(size=10),
+            f, values=lista_final, width=width, height=26,
+            corner_radius=8, font=ctk.CTkFont(family="Segoe UI", size=11),
+            fg_color="#1c1c1e", button_color="#28282d", button_hover_color="#33333a",
+            text_color="#ffffff",
             command=lambda _: self._sincronizar_estado()
         )
         opt.set(val_clean if val_clean else lista_final[0])
@@ -1448,58 +1470,67 @@ class VisualScriptEditor(ctk.CTkFrame):
         self._build_body()
 
     def _build_header(self):
-        header = ctk.CTkFrame(self, fg_color="#141824", corner_radius=10, border_width=1, border_color="#252B3D")
+        header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=4, pady=(0, 6))
         header.grid_columnconfigure(0, weight=1)
 
         self.entry_titulo = ctk.CTkEntry(
-            header, height=30, font=ctk.CTkFont(size=12, weight="bold"),
-            placeholder_text="Título para YouTube (#shorts)..."
+            header, height=34, corner_radius=12,
+            fg_color="#121214", border_color="#2c2c32", border_width=1,
+            text_color="#ffffff",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            placeholder_text="Título editable del short..."
         )
-        self.entry_titulo.grid(row=0, column=0, padx=(10, 6), pady=8, sticky="ew")
+        self.entry_titulo.grid(row=0, column=0, padx=(0, 8), pady=4, sticky="ew")
         self.entry_titulo.bind("<KeyRelease>", lambda _: self._actualizar_raw_interno())
 
         btn_add = ctk.CTkButton(
-            header, text="＋ Nuevo Bloque", width=120, height=28,
-            fg_color="#0284c7", hover_color="#0369a1",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            header, text="+ Nuevo Bloque", width=124, height=34, corner_radius=12,
+            fg_color="#242426", hover_color="#2e2e32",
+            border_width=1, border_color="#38383e", text_color="#ffffff",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             command=self._agregar_bloque_arriba
         )
-        btn_add.grid(row=0, column=1, padx=4, pady=8)
+        btn_add.grid(row=0, column=1, padx=4, pady=4)
 
         self.btn_toggle_raw = ctk.CTkButton(
-            header, text="📝 Texto Crudo", width=105, height=28,
-            fg_color="#22283A", hover_color="#333D59",
-            font=ctk.CTkFont(size=11),
+            header, text="Texto Crudo", width=108, height=34, corner_radius=12,
+            fg_color="#222226", hover_color="#2a2a2f",
+            border_width=1, border_color="#333338", text_color="#A0A0A5",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             command=self._toggle_vista
         )
-        self.btn_toggle_raw.grid(row=0, column=2, padx=8, pady=8)
+        self.btn_toggle_raw.grid(row=0, column=2, padx=(4, 0), pady=4)
 
     def _build_body(self):
-        self.scroll_cards = ctk.CTkScrollableFrame(self, fg_color="#0e111a", corner_radius=8)
-        self.scroll_cards.grid(row=1, column=0, sticky="nsew", padx=4, pady=2)
+        self.scroll_cards = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=8)
+        self.scroll_cards.grid(row=1, column=0, sticky="nsew", padx=0, pady=2)
         self.scroll_cards.grid_columnconfigure(0, weight=1)
 
-        self.raw_textbox = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Consolas", size=12))
+        self.raw_textbox = ctk.CTkTextbox(
+            self, fg_color="#101012", border_color="#242428", border_width=1,
+            corner_radius=12, text_color="#ffffff",
+            font=ctk.CTkFont(family="Consolas", size=12)
+        )
         self.raw_textbox.bind("<KeyRelease>", self._on_raw_edited_manually)
 
     def _toggle_modo_profundo(self):
         self.modo_profundo = not self.modo_profundo
         if self.modo_profundo:
-            self.btn_toggle_modo.configure(text="🎛️ Ver Assets (Todos)", fg_color="#6d28d9")
+            self.btn_toggle_modo.configure(text="Ver Assets (Todos)", fg_color="#242426")
         else:
-            self.btn_toggle_modo.configure(text="🎙️ Solo Voz (Todos)", fg_color="#1e3a5f")
+            self.btn_toggle_modo.configure(text="Solo Voz (Todos)", fg_color="#1c1c1e")
 
         for c in self.cards:
             c.mostrar_assets = self.modo_profundo
             if self.modo_profundo:
                 c._asegurar_assets_frame()
-                c.btn_toggle_card_assets.configure(text="▲ Ocultar", fg_color="#3B4261")
+                c.btn_toggle_card_assets.configure(text="▲ Ocultar", fg_color="#202023")
             else:
                 c._sincronizar_estado()
                 if hasattr(c, "assets_frame") and c.assets_frame.winfo_exists():
                     c.assets_frame.grid_remove()
-                c.btn_toggle_card_assets.configure(text="🎛️ Assets", fg_color="#22283A")
+                c.btn_toggle_card_assets.configure(text="▼ Mostrar", fg_color="#18181b")
 
     def _toggle_vista(self):
         self._modo_raw = not self._modo_raw
@@ -1507,13 +1538,13 @@ class VisualScriptEditor(ctk.CTkFrame):
             self._actualizar_raw_interno()
             self.scroll_cards.grid_remove()
             self.raw_textbox.grid(row=1, column=0, sticky="nsew", padx=4, pady=2)
-            self.btn_toggle_raw.configure(text="🎛️ Vista Tarjetas")
+            self.btn_toggle_raw.configure(text="Vista Tarjetas", text_color="#ffffff")
         else:
             texto_actual = self.raw_textbox.get("1.0", "end").strip()
             self.cargar_desde_texto(texto_actual)
             self.raw_textbox.grid_remove()
-            self.scroll_cards.grid(row=1, column=0, sticky="nsew", padx=4, pady=2)
-            self.btn_toggle_raw.configure(text="📝 Texto Crudo")
+            self.scroll_cards.grid(row=1, column=0, sticky="nsew", padx=0, pady=2)
+            self.btn_toggle_raw.configure(text="Texto Crudo", text_color="#A0A0A5")
 
     def _on_raw_edited_manually(self, _event=None):
         pass
